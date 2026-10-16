@@ -21,3 +21,11 @@ func _run() -> void:
 	print("Posicion del bloque: ", board.blocks[0]["pos"])
 	print("Cantidad de receptores: ", board.receptors.size())
 	print("Posicion del receptor: ", board.receptors[0]["pos"])
+	
+	
+	# --- Prueba del snapshot ---
+	var foto := board.snapshot()
+	board.blocks[0]["pos"] = Vector2i(0, 0)
+	print("Bloque movido a: ", board.blocks[0]["pos"])
+	board.restore(foto)
+	print("Bloque tras restaurar: ", board.blocks[0]["pos"])

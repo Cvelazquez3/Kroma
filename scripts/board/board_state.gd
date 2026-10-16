@@ -48,3 +48,18 @@ func load_from_level(level: LevelData) -> void:
 			"color": r["color"],
 			"filled": false,
 		})
+		
+		
+
+# Toma una "foto" del estado actual
+func snapshot() -> Dictionary:
+	return {
+		"blocks": blocks.duplicate(true),
+		"receptors": receptors.duplicate(true),
+	}
+
+
+# Vuelve al estado de una foto guardada
+func restore(snap: Dictionary) -> void:
+	blocks = snap["blocks"].duplicate(true)
+	receptors = snap["receptors"].duplicate(true)
