@@ -63,3 +63,55 @@ func snapshot() -> Dictionary:
 func restore(snap: Dictionary) -> void:
 	blocks = snap["blocks"].duplicate(true)
 	receptors = snap["receptors"].duplicate(true)
+	
+
+
+# Devuelve el numero del bloque en esa celda, o -1 si no hay
+func block_index_at(pos: Vector2i) -> int:
+	for i in range(blocks.size()):
+		if blocks[i]["pos"] == pos:
+			return i
+	return -1
+
+
+# Devuelve el numero del receptor en esa celda, o -1 si no hay
+func receptor_index_at(pos: Vector2i) -> int:
+	for i in range(receptors.size()):
+		if receptors[i]["pos"] == pos:
+			return i
+	return -1
+
+
+# True si en esa celda hay un bloque ya encajado (cuenta como muro)
+func is_solid_block(pos: Vector2i) -> bool:
+	var i: int = block_index_at(pos)
+	return i != -1 and blocks[i]["slotted"]
+
+
+# Se llama cuando un bloque ya se detuvo.
+# Si esta sobre un receptor libre del mismo color, lo encaja y devuelve true.
+func try_slot(block_index: int) -> bool:
+	var block: Dictionary = blocks[block_index]
+	if block["slotted"]:
+		return false
+	var r: int = receptor_index_at(block["pos"])
+	if r == -1:
+		return false
+	if receptors[r]["filled"]:
+		return false
+	if receptors[r]["color"] != block["color"]:
+		return false
+	block["slotted"] = true
+	receptors[r]["filled"] = true
+	return true
+	
+
+
+# True si todos los receptores estan ocupados
+func is_won() -> bool:
+	if receptors.is_empty():
+		return false
+	for r in receptors:
+		if not r["filled"]:
+			return false
+	return true
