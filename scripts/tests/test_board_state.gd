@@ -156,6 +156,23 @@ func _test_victory() -> void:
 		"encaje en receptor (SNAPPED o VICTORY)"
 	)
 	_check(state.cell_at(Vector2i(4, 2)) == BoardState.Cell.LOCKED, "celda encajada = LOCKED")
+			# Comprobar que Undo restaura el estado anterior a la victoria.
+	state.restore(snap)
+
+	_check(
+				state.block_info("b1")["pos"] == Vector2i(3, 3),
+                "Undo despues de victoria: posicion inicial restaurada"
+		)
+
+	_check(
+				not state.block_info("b1")["locked"],
+                "Undo despues de victoria: bloque desbloqueado"
+		)
+
+	_check(
+				state.cell_at(Vector2i(4, 2)) != BoardState.Cell.LOCKED,
+                "Undo despues de victoria: receptor liberado"
+		)
 
 
 func _test_fell_in_void() -> void:
