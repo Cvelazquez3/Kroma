@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://csqoa10gfgasm"]
+
+[ext_resource type="Script" uid="uid://d1wm6svkxbpnv" path="res://scripts/controllers/input_controller.gd" id="1_mvvly"]
+[ext_resource type="Script" uid="uid://chd2kgw3kw2j3" path="res://scripts/controllers/game_controller.gd" id="2_sdg37"]
+
+[node name="TestInput" type="Node" unique_id=1548940795]
+
+[node name="InputController" type="Node" parent="." unique_id=1609915442]
+script = ExtResource("1_mvvly")
+
+[node name="GameController" type="Node" parent="." unique_id=333380129]
+script = ExtResource("2_sdg37")
+
+[connection signal="deshacer_solicitado" from="InputController" to="GameController" method="_on_input_controller_deshacer_solicitado"]
+[connection signal="movimiento_solicitado" from="InputController" to="GameController" method="_on_input_controller_movimiento_solicitado"]
+[connection signal="reiniciar_solicitado" from="InputController" to="GameController" method="_on_input_controller_reiniciar_solicitado"]
