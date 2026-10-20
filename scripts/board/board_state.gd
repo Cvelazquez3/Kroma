@@ -6,8 +6,9 @@ extends RefCounted
 ##   - Mantener la rejilla grid[x][y] con el tipo de celda de cada posición.
 ##   - Registrar la posición y color de cada bloque activo.
 ##   - Exponer snapshot() / restore(snapshot) para Undo ilimitado y reinicio.
-##   - Aplicar un movimiento (apply_move) con inercia discreta: el bloque se
-##     desplaza celda a celda hasta chocar con un muro, borde u otro bloque.
+##   - Aplicar un movimiento (apply_move) con inercia discreta + fusión cromática:
+##     el bloque avanza celda a celda; si choca con un primario compatible, ambos
+##     fusionan y el resultado continúa con inercia (MERGING → SLIDING, GDD pág 4/5).
 ##
 ## NO conoce Godot nodes, señales de escena ni lógica visual.
 ## La misma secuencia de apply_move siempre produce el mismo estado (determinismo).
@@ -15,29 +16,43 @@ extends RefCounted
 ## Uso típico:
 ##   var state := BoardState.new()
 ##   state.init_from_level(level_data)
-##   var snap := state.snapshot()         # guardar antes de mover
+##   var snap := state.snapshot()              # guardar ANTES de mover (Undo)
 ##   state.apply_move("b1", Vector2i.RIGHT)
-##   state.restore(snap)                  # undo
+##   state.restore(snap)                       # Undo
 
 ## Tipos de celda almacenados en _grid[x][y].
 enum Cell {
-	EMPTY    = 0,  ## Celda vacía transitables
-	WALL     = 1,  ## Muro rígido (borde de nivel o muro de datos)
-	VOID     = 2,  ## Abismo (celda nula: bloque que cae → derrota)
+	EMPTY    = 0,  ## Celda vacía transitable
+	WALL     = 1,  ## Muro rígido (nivel o bloque LOCKED)
+	VOID     = 2,  ## Abismo: bloque que cae → FELL
 	BLOCK    = 3,  ## Celda ocupada por un bloque activo
 	RECEPTOR = 4,  ## Receptor vacío (objetivo)
-	LOCKED   = 5,  ## Bloque encajado en receptor (se vuelve muro rígido)
+	LOCKED   = 5,  ## Bloque encajado → muro rígido permanente
 }
 
 ## Resultado devuelto por apply_move().
 enum MoveResult {
 	OK        = 0,  ## El bloque se movió al menos una celda.
-	BLOCKED   = 1,  ## El bloque ya estaba pegado a un obstáculo; no se movió.
-	FELL      = 2,  ## El bloque cayó en un abismo → derrota.
-	SNAPPED   = 3,  ## El bloque encajó en un receptor → comprobar victoria.
-	VICTORY   = 4,  ## Todos los receptores están cubiertos.
+	BLOCKED   = 1,  ## No había espacio para avanzar.
+	FELL      = 2,  ## El bloque cayó en un abismo.
+	SNAPPED   = 3,  ## El bloque encajó en un receptor (quedan más por llenar).
+	VICTORY   = 4,  ## Todos los receptores cubiertos.
 	NOT_FOUND = 5,  ## El id de bloque no existe en el estado actual.
 }
+
+## Tabla de fusión cromática (GDD Página 5, Reglas Atómicas).
+## Solo colores primarios → secundario. Un secundario NO puede re-fusionarse.
+const MERGE_TABLE: Dictionary = {
+	"red+blue":    "purple",
+	"blue+red":    "purple",
+	"blue+yellow": "green",
+	"yellow+blue": "green",
+	"yellow+red":  "orange",
+	"red+yellow":  "orange",
+}
+
+## Colores primarios que pueden participar en una fusión.
+const PRIMARY_COLORS: Array[String] = ["red", "blue", "yellow"]
 
 ## Ancho y alto del tablero en celdas.
 var width: int = 0
@@ -109,14 +124,13 @@ func snapshot() -> Dictionary:
 	}
 
 
-## Restaura el estado a partir de un snapshot previo (para Undo / reinicio).
+## Restaura el estado a partir de un snapshot previo (para Undo / reinicio rápido).
 func restore(snap: Dictionary) -> void:
 	width = snap["width"]
 	height = snap["height"]
-	_grid = snap["grid"].duplicate(true)
-	# duplicate profundo de la rejilla
+	_grid = []
 	for x in width:
-		_grid[x] = snap["grid"][x].duplicate(true)
+		_grid.append(snap["grid"][x].duplicate(true))
 	_blocks.clear()
 	for id: String in snap["blocks"]:
 		_blocks[id] = snap["blocks"][id].duplicate(true)
@@ -129,9 +143,12 @@ func restore(snap: Dictionary) -> void:
 
 ## Aplica inercia discreta al bloque [block_id] en dirección [dir].
 ## [dir] debe ser uno de: Vector2i.UP, DOWN, LEFT, RIGHT.
-## Devuelve un MoveResult y, si el resultado es OK/SNAPPED/VICTORY,
-## rellena [out_path] con la lista ordenada de Vector2i que recorrió el bloque
-## (sin incluir la posición inicial).
+##
+## FSM del GDD (Página 4-5):
+##   IDLE → SLIDING → (MERGING → SLIDING) → IDLE / SLOTTED / VOIDED
+##
+## Devuelve un MoveResult. Si es OK/SNAPPED/VICTORY rellena [out_path]
+## con las celdas recorridas (sin incluir la posición de origen).
 func apply_move(block_id: String, dir: Vector2i, out_path: Array = []) -> MoveResult:
 	if not _blocks.has(block_id):
 		return MoveResult.NOT_FOUND
@@ -140,69 +157,146 @@ func apply_move(block_id: String, dir: Vector2i, out_path: Array = []) -> MoveRe
 	if info["locked"]:
 		return MoveResult.BLOCKED
 
-	var pos: Vector2i = info["pos"]
-	var next: Vector2i = pos + dir
-
-	# ¿El bloque ni siquiera puede avanzar un paso?
-	if not _can_enter(next):
-		return MoveResult.BLOCKED
-
-	# Inercia: avanzar celda a celda hasta que el siguiente paso no sea válido.
-	var current: Vector2i = pos
+	var origin: Vector2i = info["pos"]
+	var current: Vector2i = origin
 	out_path.clear()
 
+	# ── Bucle de inercia (SLIDING) ──
 	while true:
 		var candidate: Vector2i = current + dir
 
-		# Fuera del tablero → detenerse en la celda actual.
+		# Borde del tablero → freno en celda actual (GDD: "Borde perimetral → IDLE").
 		if not _in_bounds(candidate):
 			break
 
 		var cell_type: int = _grid[candidate.x][candidate.y]
 
+		# ── Abismo → VOIDED ──
 		if cell_type == Cell.VOID:
-			# El bloque cae: moverlo a la celda del abismo y terminar.
-			_move_block(block_id, current, candidate, out_path)
-			_grid[candidate.x][candidate.y] = Cell.WALL  # celda bloqueada tras la caída
+			_grid[current.x][current.y] = Cell.EMPTY
+			_grid[candidate.x][candidate.y] = Cell.WALL  # celda sellada tras caída
+			out_path.append(candidate)
 			_blocks.erase(block_id)
 			return MoveResult.FELL
 
+		# ── Receptor → SLOTTED o freno ──
 		if cell_type == Cell.RECEPTOR:
-			# ¿El color del bloque coincide con el del receptor?
 			var receptor_color: String = _receptor_color_at(candidate)
-			_move_block(block_id, current, candidate, out_path)
-			if receptor_color == info["color"]:
-				# Encaje: el bloque se vuelve muro rígido (LOCKED).
+			var block_color: String = _blocks[block_id]["color"]
+			# Mover el bloque a la celda del receptor.
+			_grid[current.x][current.y] = Cell.EMPTY
+			_grid[candidate.x][candidate.y] = Cell.BLOCK
+			_blocks[block_id]["pos"] = candidate
+			out_path.append(candidate)
+			current = candidate
+
+			if receptor_color == block_color:
+				# Encaje correcto → SLOTTED (muro rígido).
 				_blocks[block_id]["locked"] = true
 				_grid[candidate.x][candidate.y] = Cell.LOCKED
 				if _all_receptors_filled():
 					return MoveResult.VICTORY
 				return MoveResult.SNAPPED
 			else:
-				# El receptor tiene otro color: el bloque se detiene encima
-				# sin encajar (queda como BLOCK tapando el receptor visualmente
-				# pero no lo bloquea en el estado lógico hasta que se mueva).
-				# Para el prototipo greybox, simplemente se para.
+				# Color distinto → actúa como muro (GDD pág. 5: "Receptor incompatible → IDLE").
 				break
 
-		if cell_type != Cell.EMPTY:
-			# WALL, BLOCK o LOCKED: obstáculo, detener.
+		# ── Muro rígido o LOCKED → freno ──
+		if cell_type == Cell.WALL or cell_type == Cell.LOCKED:
 			break
 
-		# La celda siguiente está vacía: avanzar.
-		current = candidate
-		out_path.append(current)
+		# ── Bloque activo → intentar fusión cromática (MERGING) ──
+		if cell_type == Cell.BLOCK:
+			var target_id: String = _block_id_at(candidate)
+			if target_id.is_empty():
+				break
 
-	# El bloque terminó en [current] (que puede ser la misma posición inicial).
-	if current == pos:
+			var moving_color: String = _blocks[block_id]["color"]
+			var target_color: String = _blocks[target_id]["color"]
+			var merge_key: String = moving_color + "+" + target_color
+
+			if not MERGE_TABLE.has(merge_key):
+				# Incompatibles o secundario → freno de conveniencia (GDD pág. 5).
+				break
+
+			# ── Fusión válida (MERGING) ──
+			var merged_color: String = MERGE_TABLE[merge_key]
+			# El bloque activo absorbe al objetivo y toma su posición.
+			_grid[current.x][current.y] = Cell.EMPTY
+			_grid[candidate.x][candidate.y] = Cell.BLOCK
+			out_path.append(candidate)
+			current = candidate
+			_blocks.erase(target_id)
+			_blocks[block_id]["pos"] = current
+			_blocks[block_id]["color"] = merged_color
+			# El bloque fusionado conserva inercia → continúa en SLIDING (GDD pág. 5).
+			continue
+
+		# ── Celda vacía → avanzar (SLIDING) ──
+		if cell_type == Cell.EMPTY:
+			_grid[current.x][current.y] = Cell.EMPTY
+			_grid[candidate.x][candidate.y] = Cell.BLOCK
+			out_path.append(candidate)
+			current = candidate
+			_blocks[block_id]["pos"] = current
+			continue
+
+		# Cualquier otro tipo desconocido → freno preventivo.
+		break
+
+	# Fin del bucle: el bloque quedó en [current].
+	if current == origin:
 		out_path.clear()
 		return MoveResult.BLOCKED
 
-	# Actualizar rejilla y registro del bloque.
-	_grid[pos.x][pos.y] = Cell.EMPTY
-	_grid[current.x][current.y] = Cell.BLOCK
-	_blocks[block_id]["pos"] = current
 	return MoveResult.OK
+
+
+## Calcula el destino de [block_id] en [dir] SIN modificar el estado real.
+## Rellena [out_path] con las celdas que recorrería.
+## Uso: feedforward visual (línea punteada, GDD Página 9).
+func preview_move(block_id: String, dir: Vector2i, out_path: Array = []) -> Vector2i:
+	if not _blocks.has(block_id):
+		return Vector2i(-1, -1)
+	var info: Dictionary = _blocks[block_id]
+	if info["locked"]:
+		return info["pos"]
+
+	var current: Vector2i = info["pos"]
+	var sim_color: String = info["color"]
+	out_path.clear()
+
+	while true:
+		var candidate: Vector2i = current + dir
+		if not _in_bounds(candidate):
+			break
+
+		var cell_type: int = _grid[candidate.x][candidate.y]
+
+		if cell_type == Cell.VOID or cell_type == Cell.RECEPTOR:
+			out_path.append(candidate)
+			current = candidate
+			break
+
+		if cell_type == Cell.WALL or cell_type == Cell.LOCKED:
+			break
+
+		if cell_type == Cell.BLOCK:
+			var target_id: String = _block_id_at(candidate)
+			if not target_id.is_empty():
+				var merge_key: String = sim_color + "+" + _blocks[target_id]["color"]
+				if MERGE_TABLE.has(merge_key):
+					sim_color = MERGE_TABLE[merge_key]
+					out_path.append(candidate)
+					current = candidate
+					continue  # fusión simulada → continuar
+			break
+
+		# EMPTY
+		current = candidate
+		out_path.append(current)
+
+	return current
 
 
 # ──────────────────────────────────────────────────────────── consultas ───────
@@ -258,14 +352,6 @@ func _in_bounds(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x < width and pos.y >= 0 and pos.y < height
 
 
-## Verdadero si un bloque puede entrar en [pos] (celda vacía, receptor o abismo).
-func _can_enter(pos: Vector2i) -> bool:
-	if not _in_bounds(pos):
-		return false
-	var t: int = _grid[pos.x][pos.y]
-	return t == Cell.EMPTY or t == Cell.RECEPTOR or t == Cell.VOID
-
-
 ## Devuelve el color del receptor en [pos], o "" si no hay ninguno.
 func _receptor_color_at(pos: Vector2i) -> String:
 	for r: Dictionary in _receptors:
@@ -274,9 +360,9 @@ func _receptor_color_at(pos: Vector2i) -> String:
 	return ""
 
 
-## Mueve el bloque de [from] a [to] y registra las celdas intermedias en [path].
-func _move_block(block_id: String, from: Vector2i, to: Vector2i, path: Array) -> void:
-	_grid[from.x][from.y] = Cell.EMPTY
-	_grid[to.x][to.y] = Cell.BLOCK
-	_blocks[block_id]["pos"] = to
-	path.append(to)
+## Devuelve el id del bloque en [pos], o "" si no hay ninguno.
+func _block_id_at(pos: Vector2i) -> String:
+	for id: String in _blocks:
+		if _blocks[id]["pos"] == pos:
+			return id
+	return ""

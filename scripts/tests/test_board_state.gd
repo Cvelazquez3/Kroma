@@ -18,6 +18,11 @@ func _init() -> void:
 	_test_victory()
 	_test_fell_in_void()
 	_test_determinism()
+	# Fusión cromática (GDD Página 5)
+	_test_merge_two_primaries()
+	_test_merge_inertia_continues()
+	_test_secondary_does_not_merge()
+	_test_preview_move()
 
 	print("")
 	if _failures == 0:
@@ -182,3 +187,91 @@ func _test_determinism() -> void:
 		state_a.block_info("b1")["pos"] == state_b.block_info("b1")["pos"],
 		"posición idéntica tras la misma secuencia"
 	)
+
+
+# ──────────────────────────────────────────── tests de fusión cromática ───────
+
+## Tablero 6×6 para pruebas de fusión (Sprint 2).
+## Layout:
+##   . . . . . .
+##   . . . . . .
+##   R . B . . .    R=rojo(0,2), B=azul(2,2)
+##   . . . . . .
+##   . . . . . [P]  [P]=receptor púrpura (5,4)
+##   . . . . . .
+func _make_merge_state() -> BoardState:
+	var data: Dictionary = {
+		"version": 1, "id": 88, "name": "test_merge", "sector": 1,
+		"size": { "width": 6, "height": 6 },
+		"walls": [],
+		"voids": [],
+		"blocks": [
+			{ "id": "r1", "x": 0, "y": 2, "color": "red" },
+			{ "id": "b1", "x": 2, "y": 2, "color": "blue" },
+		],
+		"receptors": [{ "x": 5, "y": 4, "color": "purple" }],
+	}
+	var level := LevelLoader.load_from_dict(data)
+	assert(level.is_valid(), "nivel de merge debe ser válido")
+	var state := BoardState.new()
+	state.init_from_level(level)
+	return state
+
+
+func _test_merge_two_primaries() -> void:
+	print("Fusión de dos bloques primarios")
+	var state := _make_merge_state()
+	# Mover rojo a la derecha: chocará con azul en (2,2) → púrpura → sigue hasta (5,2).
+	var path: Array = []
+	var result := state.apply_move("r1", Vector2i.RIGHT, path)
+	_check(result == BoardState.MoveResult.OK, "movimiento OK tras fusión")
+	_check(not state.active_block_ids().has("b1"), "bloque azul absorbido")
+	_check(state.block_info("r1")["color"] == "purple", "bloque resultante es púrpura")
+	_check(state.block_info("r1")["pos"] == Vector2i(5, 2), "termina en borde derecho (5,2)")
+
+
+func _test_merge_inertia_continues() -> void:
+	print("Inercia post-fusión (MERGING → SLIDING)")
+	var state := _make_merge_state()
+	# Rojo se mueve a la derecha: fusión en (2,2) → bloque púrpura continúa → (5,2).
+	state.apply_move("r1", Vector2i.RIGHT)
+	# El bloque debe haber pasado MÁS ALLÁ de la celda de fusión.
+	_check(state.block_info("r1")["pos"].x > 2, "bloque avanzó más allá del punto de fusión")
+
+
+func _test_secondary_does_not_merge() -> void:
+	print("Secundario no puede re-fusionarse")
+	var data: Dictionary = {
+		"version": 1, "id": 87, "name": "test_no_remerge", "sector": 1,
+		"size": { "width": 6, "height": 6 },
+		"walls": [],
+		"voids": [],
+		"blocks": [
+			{ "id": "r1", "x": 0, "y": 2, "color": "red" },
+			{ "id": "b1", "x": 2, "y": 2, "color": "blue" },
+			{ "id": "y1", "x": 4, "y": 2, "color": "yellow" },
+		],
+		"receptors": [{ "x": 5, "y": 5, "color": "purple" }],
+	}
+	var level := LevelLoader.load_from_dict(data)
+	assert(level.is_valid(), "nivel secundario válido")
+	var state := BoardState.new()
+	state.init_from_level(level)
+	# Rojo avanza → fusiona con azul en (2,2) → púrpura → choca con amarillo (no compatible) → frena.
+	state.apply_move("r1", Vector2i.RIGHT)
+	var purple_pos: Vector2i = state.block_info("r1")["pos"]
+	_check(purple_pos.x == 3, "púrpura frenó en (3,2) al chocar con amarillo (no compatible)")
+	_check(state.active_block_ids().has("y1"), "amarillo sigue en el tablero")
+
+
+func _test_preview_move() -> void:
+	print("preview_move (feedforward visual)")
+	var state := _make_merge_state()
+	var path: Array = []
+	# El bloque rojo va a la derecha: fusionará con azul y llegará a (5,2).
+	var dest := state.preview_move("r1", Vector2i.RIGHT, path)
+	_check(dest == Vector2i(5, 2), "preview destino correcto (5,2)")
+	_check(path.size() > 0, "preview devuelve path no vacío")
+	# El estado NO debe haberse modificado.
+	_check(state.block_info("r1")["pos"] == Vector2i(0, 2), "estado sin cambios tras preview")
+	_check(state.active_block_ids().has("b1"), "bloque azul no modificado por preview")
