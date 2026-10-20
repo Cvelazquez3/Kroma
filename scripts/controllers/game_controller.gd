@@ -11,7 +11,7 @@ var history: HistoryController
 
 
 func _ready() -> void:
-	# Crear el estado del tablero y el historial.
+	# Crear el tablero y el historial.
 	board = BoardState.new()
 	history = HistoryController.new()
 
@@ -24,31 +24,31 @@ func _ready() -> void:
 		push_error("\n".join(level.errors))
 		return
 
-	board.load_from_level(level)
+	# Inicializar el tablero con la logica de Christian.
+	board.init_from_level(level)
 	history.iniciar_nivel(board)
 
 	print("GameController inicializado")
 	print("Nivel cargado: ", level.level_name)
-	print("Bloques disponibles: ", board.blocks.size())
+	print("Bloques disponibles: ", board.active_block_ids().size())
 	print("Movimientos en historial: ", history.cantidad_movimientos())
-
 
 
 func _on_input_controller_deshacer_solicitado() -> void:
 	if board == null or history == null:
 		return
 
-
 	if history.deshacer(board):
 		print("Undo realizado correctamente")
 
-		if not board.blocks.is_empty():
-			print("Posicion actual: ", board.blocks[0]["pos"])
+		var bloques := board.active_block_ids()
+
+		if not bloques.is_empty():
+			var bloque_id: String = bloques[0]
+			print("Posicion actual: ", board.block_info(bloque_id)["pos"])
 	else:
 		print("No hay movimientos para deshacer")
 
-		
-		
 
 func _on_input_controller_reiniciar_solicitado() -> void:
 	if board == null or history == null:
@@ -57,10 +57,14 @@ func _on_input_controller_reiniciar_solicitado() -> void:
 	history.reiniciar(board)
 
 	print("Nivel reiniciado correctamente")
-	if not board.blocks.is_empty():
-		print("Posicion inicial: ", board.blocks[0]["pos"])
-	print("Movimientos en historial: ", history.cantidad_movimientos())
 
+	var bloques := board.active_block_ids()
+
+	if not bloques.is_empty():
+		var bloque_id: String = bloques[0]
+		print("Posicion inicial: ", board.block_info(bloque_id)["pos"])
+
+	print("Movimientos en historial: ", history.cantidad_movimientos())
 
 
 func _on_input_controller_movimiento_solicitado(direccion: Vector2i) -> void:
@@ -68,18 +72,34 @@ func _on_input_controller_movimiento_solicitado(direccion: Vector2i) -> void:
 		$"../InputController".finalizar_movimiento()
 		return
 
-	print("GameController recibio movimiento: ", direccion)
+	var bloques := board.active_block_ids()
 
-	# Guardar una copia temporal del estado anterior.
+	if bloques.is_empty():
+		print("No hay bloques disponibles para mover")
+		$"../InputController".finalizar_movimiento()
+		return
+
+	# Seleccionar el primer bloque activo para esta prueba.
+	var bloque_id: String = bloques[0]
+
+	# Guardar el estado anterior.
 	var estado_anterior: Dictionary = board.snapshot()
 
-	# PENDIENTE: aqui se ejecutara la logica de movimiento de Ian.
+	# Ejecutar el movimiento real del tablero.
+	var resultado: BoardState.MoveResult = board.apply_move(
+		bloque_id,
+		direccion
+	)
 
-	# Solo registrar el movimiento si realmente cambio el tablero.
+	# Registrar solo los movimientos que modificaron el tablero.
 	if board.snapshot() != estado_anterior:
 		history.historial.append(estado_anterior)
-		print("Movimiento guardado en historial")
-	else:
-		print("El tablero no cambio. No se guarda movimiento.")
 
+		print("Movimiento guardado en historial")
+		print("Resultado: ", resultado)
+		print("Movimientos en historial: ", history.cantidad_movimientos())
+	else:
+		print("Movimiento bloqueado o sin cambios")
+
+	# Regresar al estado IDLE.
 	$"../InputController".finalizar_movimiento()
