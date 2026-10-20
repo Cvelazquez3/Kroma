@@ -84,3 +84,71 @@ godot --headless --path . --script res://scripts/tests/test_level_loader.gd
 ```
 
 (En Windows usa el ejecutable `..._console.exe` de Godot.) Debe terminar con `TODO OK`.
+
+---
+
+## Lógica pura del tablero (`BoardState`)
+
+`BoardState` traduce un `LevelData` en un estado mutable y determinista.
+**No conoce nodos de Godot ni señales visuales.** Toda la lógica de juego pasa por aquí.
+
+### Inicializar
+
+```gdscript
+var state := BoardState.new()
+state.init_from_level(level)   # level es un LevelData válido
+```
+
+### Tipos de celda (`BoardState.Cell`)
+
+| Constante  | Valor | Significado |
+|------------|-------|-------------|
+| `EMPTY`    | 0 | Celda libre |
+| `WALL`     | 1 | Muro rígido |
+| `VOID`     | 2 | Abismo (bloque que cae → derrota) |
+| `BLOCK`    | 3 | Bloque activo |
+| `RECEPTOR` | 4 | Objetivo vacío |
+| `LOCKED`   | 5 | Bloque encajado (actúa como muro) |
+
+### Mover un bloque (`apply_move`)
+
+```gdscript
+var path: Array = []
+var result := state.apply_move("b1", Vector2i.RIGHT, path)
+# path contiene las celdas que recorrió el bloque (sin el origen).
+```
+
+El bloque se desplaza con **inercia discreta**: avanza celda a celda en la dirección indicada hasta que el siguiente paso sea un obstáculo (muro, borde, otro bloque o bloque encajado). Si cae en un abismo devuelve `FELL`; si encaja en un receptor del mismo color, `SNAPPED` o `VICTORY`.
+
+### Resultados posibles (`BoardState.MoveResult`)
+
+| Constante   | Significado |
+|-------------|-------------|
+| `OK`        | El bloque se movió al menos una celda |
+| `BLOCKED`   | No había espacio para avanzar |
+| `FELL`      | El bloque cayó en un abismo |
+| `SNAPPED`   | Encajó en un receptor (quedan más por llenar) |
+| `VICTORY`   | Todos los receptores cubiertos |
+| `NOT_FOUND` | El id de bloque no existe |
+
+### Undo y reinicio
+
+```gdscript
+# Guardar ANTES de mover:
+var snap := state.snapshot()
+state.apply_move("b1", Vector2i.UP)
+
+# Deshacer:
+state.restore(snap)
+
+# Reinicio: guardar el snapshot inicial justo después de init_from_level().
+var initial_snap := state.snapshot()
+# ... (varios movimientos) ...
+state.restore(initial_snap)   # reinicia al estado de carga
+```
+
+### Probar BoardState
+
+```
+godot --headless --path . --script res://scripts/tests/test_board_state.gd
+```
