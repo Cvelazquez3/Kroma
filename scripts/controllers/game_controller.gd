@@ -64,7 +64,22 @@ func _on_input_controller_reiniciar_solicitado() -> void:
 
 
 func _on_input_controller_movimiento_solicitado(direccion: Vector2i) -> void:
+	if board == null or history == null:
+		$"../InputController".finalizar_movimiento()
+		return
+
 	print("GameController recibio movimiento: ", direccion)
 
-	# Temporal: liberar el controlador hasta integrar la logica real.
+	# Guardar una copia temporal del estado anterior.
+	var estado_anterior: Dictionary = board.snapshot()
+
+	# PENDIENTE: aqui se ejecutara la logica de movimiento de Ian.
+
+	# Solo registrar el movimiento si realmente cambio el tablero.
+	if board.snapshot() != estado_anterior:
+		history.historial.append(estado_anterior)
+		print("Movimiento guardado en historial")
+	else:
+		print("El tablero no cambio. No se guarda movimiento.")
+
 	$"../InputController".finalizar_movimiento()
