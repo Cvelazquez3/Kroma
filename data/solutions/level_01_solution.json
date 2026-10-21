@@ -1,0 +1,12 @@
+{
+	"level_id": 1,
+	"solved": true,
+	"moves_count": 3,
+	"states_explored": -1,
+	"note": "Pre-computado manualmente. Verificar con test_solver.gd cuando Godot esté en PATH.",
+	"solution": [
+		{ "block": "b1", "dir": "up" },
+		{ "block": "b1", "dir": "right" },
+		{ "block": "b1", "dir": "down" }
+	]
+}

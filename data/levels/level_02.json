@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "id": 2,
+  "name": "Síntesis Cromática",
+  "sector": 1,
+  "size": { "width": 6, "height": 6 },
+  "walls": [
+    { "x": 4, "y": 1 },
+    { "x": 2, "y": 3 }
+  ],
+  "voids": [
+    { "x": 2, "y": 4 }
+  ],
+  "blocks": [
+    { "id": "r1", "x": 0, "y": 2, "color": "red" },
+    { "id": "b1", "x": 3, "y": 2, "color": "blue" }
+  ],
+  "receptors": [
+    { "x": 5, "y": 5, "color": "purple" }
+  ]
+}

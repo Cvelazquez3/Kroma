@@ -152,3 +152,47 @@ state.restore(initial_snap)   # reinicia al estado de carga
 ```
 godot --headless --path . --script res://scripts/tests/test_board_state.gd
 ```
+
+---
+
+## LevelSolver — Validación Algorítmica
+
+`LevelSolver` (`scripts/board/level_solver.gd`) implementa un solver BFS que
+verifica matemáticamente que un nivel es resoluble y devuelve la secuencia
+óptima de movimientos.
+
+### API
+
+```gdscript
+# Resolver un nivel
+var result := LevelSolver.solve(level_data)
+# result = {
+#   "solved": bool,
+#   "moves":  Array[{block: String, dir: String}],
+#   "states_explored": int
+# }
+
+# Guardar solución en data/solutions/level_XX_solution.json
+LevelSolver.save_solution(result, level_data.id)
+
+# Convertir nombre de dirección a Vector2i (para replay)
+var dir := LevelSolver.dir_from_name("right")  # → Vector2i.RIGHT
+```
+
+### Validar niveles 01-03 con el solver
+
+```
+godot --headless --path . --script res://scripts/tests/test_solver.gd
+```
+
+El script carga cada nivel, ejecuta el BFS, verifica la solución por replay,
+e imprime la secuencia completa. Las soluciones pre-computadas se encuentran
+en `data/solutions/`.
+
+### Directorios de soluciones
+
+| Archivo | Nivel | Movimientos |
+|---------|-------|-------------|
+| `data/solutions/level_01_solution.json` | 5×5 rojo | 3 (↑ → ↓) |
+| `data/solutions/level_02_solution.json` | 6×6 fusión | 2 (→ ↓) |
+| `data/solutions/level_03_solution.json` | 7×7 topológico | 7 |
