@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://bt610dq6yey11"]
+
+[ext_resource type="Script" uid="uid://d4elaokg71e80" path="res://scenes/level_01.gd" id="1_bpt1m"]
+
+[node name="Level01" type="Node2D" unique_id=992990455]
+script = ExtResource("1_bpt1m")
+
+[node name="BoardContainer" type="Node2D" parent="." unique_id=849437905]
+
+[node name="ReceptorsContainer" type="Node2D" parent="." unique_id=1619365848]
+
+[node name="BlocksContainer" type="Node2D" parent="." unique_id=763723059]
