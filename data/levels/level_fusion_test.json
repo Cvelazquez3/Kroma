@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": 99,
+  "name": "Prueba de fusion cromatica",
+  "sector": 1,
+  "size": { "width": 5, "height": 5 },
+  "walls": [],
+  "voids": [],
+  "blocks": [
+	{ "id": "b1", "x": 0, "y": 2, "color": "red" },
+	{ "id": "b2", "x": 4, "y": 2, "color": "yellow" }
+],
+  "receptors": [
+{ "x": 2, "y": 2, "color": "orange" } 
+]
+}

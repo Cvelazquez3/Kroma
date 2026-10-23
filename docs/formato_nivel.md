@@ -7,8 +7,8 @@ Se carga con `LevelLoader` y el resultado es un `LevelData`. El código de juego
 ```gdscript
 var level := LevelLoader.load_from_file("res://data/levels/level_01.json")
 if not level.is_valid():
-    push_error("\n".join(level.errors))
-    return
+	push_error("\n".join(level.errors))
+	return
 ```
 
 ## Coordenadas
@@ -61,7 +61,7 @@ Colores válidos: `red`, `blue`, `yellow` (primarios) y `purple`, `green`, `oran
 ## Ejemplo: Nivel 01
 
 ```
-     x: 0 1 2 3 4
+	 x: 0 1 2 3 4
    y0:  . . . . .
    y1:  . . . . .
    y2:  . . # . R      R = receptor rojo (4,2)

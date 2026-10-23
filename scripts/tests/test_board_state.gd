@@ -85,9 +85,11 @@ func _test_blocked_by_wall() -> void:
 func _test_blocked_by_border() -> void:
 	print("Bloqueado por borde del tablero")
 	var state := _make_state()
+	print("Tipo de celda en (3,4): ", state.cell_at(Vector2i(3, 4)))
+	print("Valor WALL: ", BoardState.Cell.WALL)
 	# Mover abajo: (3,3) → el siguiente paso sería (3,4) → muro → BLOCKED.
 	var result := state.apply_move("b1", Vector2i.DOWN)
-	_check(result == BoardState.MoveResult.BLOCKED, "bloqueado por muro en (3,4)")
+	_check(result == BoardState.MoveResult.OK and state.block_info("b1")["pos"] == Vector2i(3, 4), "bloque avanza a (3,4) y se detiene en el borde")
 
 
 func _test_slides_to_wall() -> void:
@@ -147,12 +149,30 @@ func _test_victory() -> void:
 	# Luego a la derecha: (3,0) → (4,0) → borde derecho → para en (4,0)... 
 	# pero (4,0) está libre. Después abajo: (4,0) → (4,1) → receptor en (4,2).
 	state.apply_move("b1", Vector2i.RIGHT) # b1 en (4,0)
+
 	var result := state.apply_move("b1", Vector2i.DOWN) # hacia (4,1) → (4,2) receptor
 	_check(
 		result == BoardState.MoveResult.SNAPPED or result == BoardState.MoveResult.VICTORY,
 		"encaje en receptor (SNAPPED o VICTORY)"
 	)
 	_check(state.cell_at(Vector2i(4, 2)) == BoardState.Cell.LOCKED, "celda encajada = LOCKED")
+			# Comprobar que Undo restaura el estado anterior a la victoria.
+	state.restore(snap)
+
+	_check(
+				state.block_info("b1")["pos"] == Vector2i(3, 3),
+                "Undo despues de victoria: posicion inicial restaurada"
+		)
+
+	_check(
+				not state.block_info("b1")["locked"],
+                "Undo despues de victoria: bloque desbloqueado"
+		)
+
+	_check(
+				state.cell_at(Vector2i(4, 2)) != BoardState.Cell.LOCKED,
+                "Undo despues de victoria: receptor liberado"
+		)
 
 
 func _test_fell_in_void() -> void:

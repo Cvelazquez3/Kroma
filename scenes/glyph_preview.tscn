@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://cpr5h2axxyik"]
+
+[ext_resource type="Script" uid="uid://nucfos81nb4b" path="res://scripts/tests/glyph_preview.gd" id="1_5nua3"]
+
+[node name="Node2D" type="Node2D" unique_id=977326454]
+script = ExtResource("1_5nua3")
