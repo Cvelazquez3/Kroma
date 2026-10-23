@@ -47,21 +47,21 @@ func _ready() -> void:
 
 func _build_greybox() -> void:
 	# Ajustar cell_size dinámicamente si el tablero supera 5 celdas
-	var max_dim := max(level_data.width, level_data.height)
+	var max_dim: int = maxi(level_data.width, level_data.height)
 	if max_dim > 5:
 		cell_size = 520.0 / float(max_dim)
 	else:
 		cell_size = float(BASE_CELL_SIZE)
 
 	# Centrado en pantalla (resolución base típica 1152x648)
-	var viewport_size := get_viewport_rect().size
+	var viewport_size: Vector2 = get_viewport_rect().size
 	if viewport_size.x <= 0 or viewport_size.y <= 0:
 		viewport_size = Vector2(1152, 648)
-	var board_pixel_width := level_data.width * cell_size
-	var board_pixel_height := level_data.height * cell_size
+	var board_pixel_width: float = float(level_data.width) * cell_size
+	var board_pixel_height: float = float(level_data.height) * cell_size
 	position = Vector2(
-		max(40.0, (viewport_size.x - board_pixel_width) * 0.5),
-		max(70.0, (viewport_size.y - board_pixel_height) * 0.5 + 20.0)
+		maxf(40.0, (viewport_size.x - board_pixel_width) * 0.5),
+		maxf(70.0, (viewport_size.y - board_pixel_height) * 0.5 + 20.0)
 	)
 	
 	# Celdas vacías
