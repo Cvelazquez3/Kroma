@@ -9,6 +9,8 @@ var board: BoardState
 # Historial para Undo y reinicio.
 var history: HistoryController
 
+# Identificador del bloque seleccionado por el jugador.
+var bloque_seleccionado: String = ""
 
 func _ready() -> void:
 	# Crear el tablero y el historial.
@@ -27,6 +29,7 @@ func _ready() -> void:
 	# Inicializar el tablero con la logica de Christian.
 	board.init_from_level(level)
 	history.iniciar_nivel(board)
+	bloque_seleccionado = board.active_block_ids()[0] if not board.active_block_ids().is_empty() else ""
 
 	print("GameController inicializado")
 	print("Nivel cargado: ", level.level_name)
@@ -80,7 +83,7 @@ func _on_input_controller_movimiento_solicitado(direccion: Vector2i) -> void:
 		return
 
 	# Seleccionar el primer bloque activo para esta prueba.
-	var bloque_id: String = bloques[0]
+	var bloque_id: String = bloque_seleccionado if bloque_seleccionado in bloques else bloques[0]
 
 	# Guardar el estado anterior.
 	var estado_anterior: Dictionary = board.snapshot()
@@ -103,3 +106,16 @@ func _on_input_controller_movimiento_solicitado(direccion: Vector2i) -> void:
 
 	# Regresar al estado IDLE.
 	$"../InputController".finalizar_movimiento()
+
+func seleccionar_bloque(id: String) -> void:
+	if id not in board.active_block_ids():
+		return
+	bloque_seleccionado = id
+	
+func seleccionar_siguiente_bloque() -> void:
+	var bloques := board.active_block_ids()
+	if bloques.is_empty():
+		return
+		
+	var indice_actual: int = bloques.find(bloque_seleccionado)
+	bloque_seleccionado = bloques[(indice_actual + 1) % bloques.size()]

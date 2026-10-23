@@ -10,3 +10,24 @@ script = ExtResource("1_bpt1m")
 [node name="ReceptorsContainer" type="Node2D" parent="." unique_id=1619365848]
 
 [node name="BlocksContainer" type="Node2D" parent="." unique_id=763723059]
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=445884880]
+
+[node name="HUDContainer" type="HBoxContainer" parent="HUD" unique_id=1423805898]
+offset_left = 100.0
+offset_top = 10.0
+offset_right = 339.0
+offset_bottom = 59.0
+
+[node name="SectorLabel" type="Label" parent="HUD/HUDContainer" unique_id=174632079]
+layout_mode = 2
+text = "SECTOR 1
+"
+
+[node name="RestartButton" type="Button" parent="HUD/HUDContainer" unique_id=1472122340]
+layout_mode = 2
+text = "Reiniciar"
+
+[node name="UndoButton" type="Button" parent="HUD/HUDContainer" unique_id=1261819074]
+layout_mode = 2
+text = "Deshacer"
