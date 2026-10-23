@@ -277,4 +277,4 @@ func _cargar_nivel(ruta: String) -> void:
 	_build_greybox()
 	_actualizar_seleccion_visual()
 
-	$HUD/HUDContainer/SectorLabel.text = "SECTOR " + str(level_data.sector) + " - " + str(level_data.name)
+	$HUD/HUDContainer/SectorLabel.text = "SECTOR " + str(level_data.sector) + " - " + str(level_data.level_name)
