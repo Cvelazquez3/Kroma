@@ -23,6 +23,8 @@ signal movimiento_solicitado(direccion: Vector2i)
 
 signal deshacer_solicitado
 signal reiniciar_solicitado
+@warning_ignore("unused_signal")
+signal cambiar_bloque_solicitado
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -36,6 +38,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed("restart_level"):
 		if estado_actual == Estado.IDLE:
 			reiniciar_solicitado.emit()
+		return
+		
+	if event.keycode == KEY_TAB and estado_actual == Estado.IDLE:
+		cambiar_bloque_solicitado.emit()
 		return
 	# Bloquear movimientos mientras se desliza
 	if estado_actual != Estado.IDLE:
