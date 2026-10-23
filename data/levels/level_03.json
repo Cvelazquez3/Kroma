@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": 3,
+  "name": "Mutación Topológica",
+  "sector": 1,
+  "size": {
+    "width": 7,
+    "height": 7
+  },
+  "walls": [
+    { "x": 3, "y": 1 },
+    { "x": 4, "y": 6 }
+  ],
+  "voids": [
+    { "x": 3, "y": 5 }
+  ],
+  "blocks": [
+    { "id": "b1", "x": 0, "y": 3, "color": "blue" },
+    { "id": "r1", "x": 4, "y": 3, "color": "red" },
+    { "id": "y1", "x": 4, "y": 5, "color": "yellow" }
+  ],
+  "receptors": [
+    { "x": 3, "y": 6, "color": "purple" },
+    { "x": 5, "y": 6, "color": "yellow" }
+  ]
+}

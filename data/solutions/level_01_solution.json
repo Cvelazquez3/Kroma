@@ -1,0 +1,10 @@
+{
+	"level_id": 1,
+	"solved": true,
+	"moves_count": 3,
+	"solution": [
+		{ "block": "b1", "dir": "up" },
+		{ "block": "b1", "dir": "right" },
+		{ "block": "b1", "dir": "down" }
+	]
+}

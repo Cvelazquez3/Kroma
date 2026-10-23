@@ -1,0 +1,13 @@
+{
+	"level_id": 3,
+	"solved": true,
+	"moves_count": 6,
+	"solution": [
+		{ "block": "r1", "dir": "left" },
+		{ "block": "r1", "dir": "down" },
+		{ "block": "r1", "dir": "right" },
+		{ "block": "y1", "dir": "right" },
+		{ "block": "y1", "dir": "down" },
+		{ "block": "y1", "dir": "left" }
+	]
+}
