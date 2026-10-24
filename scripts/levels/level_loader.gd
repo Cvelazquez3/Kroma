@@ -54,12 +54,6 @@ static func load_from_dict(data: Dictionary) -> LevelData:
 	var sector_value: Variant = _to_int(data.get("sector", 1))
 	level.sector = sector_value if sector_value != null else 1
 
-	# --- Directiva técnica / Instrucción tutorial ---
-	if data.has("instruction"):
-		level.instruction = str(data["instruction"])
-	elif data.has("instruccion"):
-		level.instruction = str(data["instruccion"])
-
 	# --- Tamaño ---
 	var size: Variant = data.get("size")
 	if typeof(size) != TYPE_DICTIONARY:
