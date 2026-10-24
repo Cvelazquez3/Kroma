@@ -110,21 +110,26 @@ bloqueados.
 ## Estructura del Proyecto
 
 ```
+├```text
+├── assets/
+│   └── audio/              # Recursos sonoros y efectos reactivos
 ├── data/
-│   └── levels/              # Archivos de niveles JSON (Sector 1: level_01 a level_04)
-├── scenes/
-│   ├── board/               # Nodos del tablero, celdas y visuales
-│   └── ui/                  # HUD interactivo, banner técnico y botones UI
+│   ├── levels/             # Archivos de serialización de sectores en formato JSON
+│   └── solutions/          # Soluciones algorítmicas validadas por el solver
+├── docs/                   # Documentación técnica adicional y diagramas
+├── scenes/                 # Escenas del motor (.tscn) de tablero, entidades e interfaz
 ├── scripts/
-│   ├── board/
-│   │   ├── board_state.gd   # Simulación lógica y reglas puras del tablero
-│   │   └── level_solver.gd  # Verificador algorítmico Solver BFS
-│   ├── levels/
-│   │   ├── level_data.gd    # DTO validado del nivel
-│   │   └── level_loader.gd  # Parser JSON y validador de integridad
-│   └── audio/
-│       └── audio_manager.gd # Gestor de efectos de sonido y buses
-└── project.godot
+│   ├── board/              # Lógica pura del tablero (BoardState, Solver BFS)
+│   ├── controllers/        # Controladores de entrada, flujo de juego y undo
+│   ├── levels/             # Ingestión, carga y parsing de niveles (LevelLoader)
+│   ├── tests/              # Pruebas unitarias y de solvencia
+│   ├── view/               # Renderizado del tablero, visuales de celdas y HUD
+│   ├── audio_manager.gd    # Módulo centralizado de eventos y modulación de audio
+│   └── level_generator.gd  # Generador algorítmico procedural de sectores infinitos
+├── export_presets.cfg      # Configuraciones de compilación y exportación de Godot
+├── icon.svg                # Ícono vectorizado del proyecto
+└── README.md               # Documentación técnica principal
+└── project.godot           # Proyecto de Godot
 ```
 ---
 
@@ -176,7 +181,7 @@ del HUD.
 ### Instrucciones de Instalación
 1. Clonar el repositorio fuente:
    ```
-   git clone [https://github.com/tu-usuario/kroma.git](https://github.com/tu-usuario/kroma.git)
+   git clone [https://github.com/Cvelazquez3/Kroma](https://github.com/Cvelazquez3/Kroma)]
    cd kroma
    ```
 2. **Inicialización en el motor:**
