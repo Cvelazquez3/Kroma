@@ -1,26 +1,22 @@
 {
   "version": 1,
   "id": 3,
-  "name": "Mutación Topológica",
-  "sector": 1,
-  "size": {
-    "width": 7,
-    "height": 7
-  },
+  "name": "Pivote y Freno",
+  "sector": 3,
+  "instruction": "MULTIFUNCIONAL // [ESPACIO] CAMBIA DE BLOQUE • USA BLOQUES COMO FRENO",
+  "size": { "width": 6, "height": 6 },
   "walls": [
-    { "x": 3, "y": 1 },
-    { "x": 4, "y": 6 }
+	{ "x": 1, "y": 3 },
+	{ "x": 4, "y": 2 },
+	{ "x": 5, "y": 4 }
   ],
-  "voids": [
-    { "x": 3, "y": 5 }
-  ],
+  "voids": [],
   "blocks": [
-    { "id": "b1", "x": 0, "y": 3, "color": "blue" },
-    { "id": "r1", "x": 4, "y": 3, "color": "red" },
-    { "id": "y1", "x": 4, "y": 5, "color": "yellow" }
+	{ "id": "b1", "x": 2, "y": 4, "color": "blue" },
+	{ "id": "b2", "x": 2, "y": 5, "color": "yellow" }
   ],
   "receptors": [
-    { "x": 3, "y": 6, "color": "purple" },
-    { "x": 5, "y": 6, "color": "yellow" }
+	{ "x": 0, "y": 0, "color": "blue" },
+	{ "x": 2, "y": 1, "color": "yellow" }
   ]
 }

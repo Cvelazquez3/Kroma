@@ -1,8 +1,9 @@
 {
   "version": 1,
   "id": 1,
-  "name": "Deslizar y Encajar",
+  "name": "Inercia de Vector",
   "sector": 1,
+  "instruction": "INERCIA // ESQUIVA LOS MUROS CON [WASD] O [FLECHAS] Y LLEGA A LA META",
   "size": { "width": 5, "height": 5 },
   "walls": [
 	{ "x": 1, "y": 4 },
