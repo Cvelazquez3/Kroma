@@ -110,7 +110,7 @@ bloqueados.
 ## Estructura del Proyecto
 
 ```
-├```text
+├
 ├── assets/
 │   └── audio/              # Recursos sonoros y efectos reactivos
 ├── data/
