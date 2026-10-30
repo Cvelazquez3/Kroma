@@ -15,7 +15,9 @@ func _ready() -> void:
 		"snap": "res://assets/audio/snap.wav",
 		"void": "res://assets/audio/void.wav",
 		"undo": "res://assets/audio/undo.wav",
-		"victory": "res://assets/audio/victory.wav"
+		"victory_1": "res://assets/audio/victory_1.wav",
+		"victory_2": "res://assets/audio/victory_2.wav",
+		"victory_3": "res://assets/audio/victory_3.wav"
 	}
 
 	for key in sound_files:
@@ -66,7 +68,7 @@ func play(sfx_name: String, pitch: float = 1.0, volume_db: float = 0.0, max_dura
 
 	target_player.stop()
 	target_player.stream = _streams[sfx_name]
-	target_player.pitch_scale = pitch * randf_range(0.98, 1.02)
+	target_player.pitch_scale = pitch * randf_range(0.95, 1.05)
 	target_player.volume_db = volume_db
 	target_player.play()
 

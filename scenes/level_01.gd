@@ -436,7 +436,9 @@ func _execute_move(dir: Vector2i) -> void:
 			elif result == BoardState.MoveResult.OK:
 				AudioManager.play("bump", 0.9, -12.0, 0.06)
 			elif result == BoardState.MoveResult.VICTORY:
-				AudioManager.play("victory", 1.0, 0.0, 2.6, 0.8)
+				var id_sonido := randi_range(1, 3) # Aleatorio entre 3 sonidos
+				# AudioManager.play("victory_%d" % id_sonido, randf_range(0.95, 1.05), 0.0, 2.6, 0.8)
+				AudioManager.play("victory_2", randf_range(0.6, 0.8), 0.0, 2.6, 0.8)
 				print("Resultado del movimiento: ", result)
 				_mostrar_notificacion_victoria(func():
 					is_moving = false

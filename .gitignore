@@ -1,3 +1,29 @@
-# Godot 4+ specific ignores
+# =====================================================================
+# Godot 4.x - Configuración de Exclusión de Git
+# =====================================================================
+
+# Caché de importación, metadatos y texturas compiladas
 .godot/
-/android/
+
+# Archivos binarios de traducción y localización
+*.translation
+
+# Binarios y compilaciones de exportación
+export/
+build/
+bin/
+
+# Volcados de depuración, logs y perfiles de rendimiento
+*.log
+*.tmp
+
+# Archivos de entorno y configuración de IDEs
+.idea/
+.vscode/
+*.swp
+*~
+
+# Metadatos del sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
