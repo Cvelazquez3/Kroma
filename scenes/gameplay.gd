@@ -28,11 +28,17 @@ var board: BoardState
 
 var block_nodes: Dictionary = {}
 var is_moving: bool = false
+var is_defeated: bool = false
 var bloque_seleccionado: String = ""
 
 var history_stack: Array = []
 var initial_snapshot: Dictionary = {}
 var procedural_run_count: int = 0
+var current_moves: int = 0
+var par_moves: int = 0
+
+var defeat_canvas: CanvasLayer = null
+var moves_label: Label = null
 
 # Referencias a nodos
 @onready var board_container: Node2D = $BoardContainer
@@ -60,15 +66,27 @@ func _setup_hud() -> void:
 			hud_box.offset_bottom = 56.0
 			hud_box.add_theme_constant_override("separation", 12)
 
-	# Anclaje: Botones (izquierda), Etiqueta (derecha)
+	# Anclaje: Botones (izquierda), Pasos/Par (centro), Sector (derecha)
 	if has_node("HUD/HUDContainer/RestartButton") and has_node("HUD/HUDContainer/SectorLabel"):
 		var btn_r: Button = $HUD/HUDContainer/RestartButton
 		var btn_u: Button = $HUD/HUDContainer/UndoButton
 		var lbl: Label = $HUD/HUDContainer/SectorLabel
 
+		# Indicador de movimientos y par óptimo
+		if not has_node("HUD/HUDContainer/MovesLabel"):
+			moves_label = Label.new()
+			moves_label.name = "MovesLabel"
+			moves_label.add_theme_font_size_override("font_size", 12)
+			moves_label.add_theme_color_override("font_color", Color(0.94, 0.82, 0.35))
+			moves_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			$HUD/HUDContainer.add_child(moves_label)
+		else:
+			moves_label = $HUD/HUDContainer/MovesLabel
+
 		$HUD/HUDContainer.move_child(btn_r, 0)
 		$HUD/HUDContainer.move_child(btn_u, 1)
-		$HUD/HUDContainer.move_child(lbl, 2)
+		$HUD/HUDContainer.move_child(moves_label, 2)
+		$HUD/HUDContainer.move_child(lbl, 3)
 
 		btn_r.custom_minimum_size = Vector2(110, 32)
 		btn_u.custom_minimum_size = Vector2(110, 32)
@@ -359,6 +377,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_moving:
 		return
 
+	# Reversión y reinicio siempre disponibles (incluso en estado de derrota)
+	if event.is_action_pressed("undo_move") or (event is InputEventKey and event.pressed and event.keycode == KEY_Z):
+		_undo()
+		return
+	elif event.is_action_pressed("restart_level") or (event is InputEventKey and event.pressed and event.keycode == KEY_R):
+		_restart()
+		return
+
+	# Si la simulación está bloqueada por derrota, impedir nuevos movimientos
+	if is_defeated:
+		return
+
 	# Alternar bloque activo
 	if event is InputEventKey and event.pressed and not event.is_echo():
 		if event.keycode == KEY_SPACE or event.keycode == KEY_TAB:
@@ -374,10 +404,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		_execute_move(Vector2i.LEFT)
 	elif event.is_action_pressed("ui_right") or event.is_action_pressed("move_right"):
 		_execute_move(Vector2i.RIGHT)
-	elif event.is_action_pressed("undo_move") or (event is InputEventKey and event.pressed and event.keycode == KEY_Z):
-		_undo()
-	elif event.is_action_pressed("restart_level") or (event is InputEventKey and event.pressed and event.keycode == KEY_R):
-		_restart()
 
 
 func _seleccionar_siguiente_bloque() -> void:
@@ -412,6 +438,8 @@ func _execute_move(dir: Vector2i) -> void:
 	# 1. Sin movimiento: micro-bump elástico al topar
 	if path.size() > 0:
 		history_stack.push_back(snap)
+		current_moves += 1
+		_actualizar_hud_movimientos()
 		is_moving = true
 		
 		# Sonido de deslizamiento
@@ -466,6 +494,8 @@ func _execute_move(dir: Vector2i) -> void:
 			if result != BoardState.MoveResult.VICTORY:
 				is_moving = false
 				_sincronizar_bloques_completos()
+				if board.is_defeated():
+					_mostrar_notificacion_derrota()
 		)
 
 	else:
@@ -541,20 +571,26 @@ func _actualizar_glifo(blk: Panel, color_name: String) -> void:
 func _undo() -> void:
 	if history_stack.is_empty() or is_moving:
 		return
+	_cerrar_notificacion_derrota()
 	AudioManager.play("undo", 1.0, -3.0, 0.08)
 
 	var prev_record: Dictionary = history_stack.pop_back()
 	board.restore(prev_record["board"])
 	bloque_seleccionado = prev_record.get("block_id", bloque_seleccionado)
+	current_moves = maxi(0, current_moves - 1)
+	_actualizar_hud_movimientos()
 	_sincronizar_bloques_completos()
 
 
 func _restart() -> void:
 	if is_moving:
 		return
+	_cerrar_notificacion_derrota()
 	AudioManager.play("undo", 0.85, -2.0, 0.08)
 	board.restore(initial_snapshot)
 	history_stack.clear()
+	current_moves = 0
+	_actualizar_hud_movimientos()
 
 	if not level_data.blocks.is_empty():
 		bloque_seleccionado = level_data.blocks[0]["id"]
@@ -641,6 +677,25 @@ func _mostrar_notificacion_victoria(on_complete: Callable) -> void:
 	lbl_main.add_theme_color_override("font_color", Color(0.96, 0.96, 0.98, 1.0))
 	vbox.add_child(lbl_main)
 
+	if par_moves > 0:
+		var spacer_eval := Control.new()
+		spacer_eval.custom_minimum_size = Vector2(0, 4)
+		vbox.add_child(spacer_eval)
+
+		var lbl_eval := Label.new()
+		lbl_eval.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl_eval.add_theme_font_size_override("font_size", 11)
+		if current_moves <= par_moves:
+			lbl_eval.text = "★★★ RANGO S // ÓPTIMO (%d/%d PASOS)" % [current_moves, par_moves]
+			lbl_eval.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+		elif current_moves <= par_moves + 3:
+			lbl_eval.text = "★★☆ RANGO A // EFICIENTE (%d/%d PASOS)" % [current_moves, par_moves]
+			lbl_eval.add_theme_color_override("font_color", Color(0.4, 0.9, 0.6))
+		else:
+			lbl_eval.text = "★☆☆ RANGO B // COMPLETADO (%d/%d PASOS)" % [current_moves, par_moves]
+			lbl_eval.add_theme_color_override("font_color", Color(0.75, 0.78, 0.85))
+		vbox.add_child(lbl_eval)
+
 	# 4. Control de opacidad directo sobre el CanvasLayer entero
 	# Inicia completamente invisible
 	backdrop.modulate.a = 0.0
@@ -671,6 +726,104 @@ func _mostrar_notificacion_victoria(on_complete: Callable) -> void:
 			on_complete.call()
 
 
+func _mostrar_notificacion_derrota() -> void:
+	if is_defeated or defeat_canvas != null:
+		return
+	is_defeated = true
+
+	# Sonido disonante de vacío / fallo
+	AudioManager.play("void", 0.70, 2.0, 0.1)
+
+	defeat_canvas = CanvasLayer.new()
+	defeat_canvas.layer = 127
+	get_tree().root.add_child(defeat_canvas)
+
+	# Fondo oscuro traslúcido
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.08, 0.02, 0.03, 0.75)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	defeat_canvas.add_child(backdrop)
+
+	# Panel central con reborde carmesí
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(400, 110)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+	var s_derrota := StyleBoxFlat.new()
+	s_derrota.bg_color = Color(0.10, 0.04, 0.05, 0.95)
+	s_derrota.set_corner_radius_all(6)
+	s_derrota.border_width_left = 1
+	s_derrota.border_width_top = 1
+	s_derrota.border_width_right = 1
+	s_derrota.border_width_bottom = 1
+	s_derrota.border_color = Color(0.95, 0.22, 0.25, 0.70)
+	s_derrota.shadow_color = Color(0.0, 0.0, 0.0, 0.6)
+	s_derrota.shadow_size = 20
+	panel.add_theme_stylebox_override("panel", s_derrota)
+	defeat_canvas.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	panel.add_child(vbox)
+
+	var lbl_sub := Label.new()
+	lbl_sub.text = "ESTADO DEL SISTEMA // IRRESOLUBLE"
+	lbl_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_sub.add_theme_font_size_override("font_size", 10)
+	lbl_sub.add_theme_color_override("font_color", Color(0.95, 0.35, 0.35, 0.85))
+	vbox.add_child(lbl_sub)
+
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 4)
+	vbox.add_child(spacer)
+
+	var lbl_main := Label.new()
+	lbl_main.text = "SIMULACIÓN BLOQUEADA"
+	lbl_main.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_main.add_theme_font_size_override("font_size", 17)
+	lbl_main.add_theme_color_override("font_color", Color(0.98, 0.95, 0.95, 1.0))
+	vbox.add_child(lbl_main)
+
+	var spacer2 := Control.new()
+	spacer2.custom_minimum_size = Vector2(0, 6)
+	vbox.add_child(spacer2)
+
+	var lbl_help := Label.new()
+	lbl_help.text = "PULSA [Z] PARA DESHACER  //  [R] PARA REINICIAR"
+	lbl_help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_help.add_theme_font_size_override("font_size", 11)
+	lbl_help.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.60))
+	vbox.add_child(lbl_help)
+
+	# Fade in
+	backdrop.modulate.a = 0.0
+	panel.modulate.a = 0.0
+	var tw := defeat_canvas.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(backdrop, "modulate:a", 1.0, 0.2)
+	tw.tween_property(panel, "modulate:a", 1.0, 0.2)
+
+
+func _cerrar_notificacion_derrota() -> void:
+	is_defeated = false
+	if defeat_canvas != null and is_instance_valid(defeat_canvas):
+		defeat_canvas.queue_free()
+		defeat_canvas = null
+
+
+func _actualizar_hud_movimientos() -> void:
+	if moves_label == null and has_node("HUD/HUDContainer/MovesLabel"):
+		moves_label = $HUD/HUDContainer/MovesLabel
+	if moves_label:
+		if par_moves > 0:
+			moves_label.text = "PASOS: %02d // PAR: %02d" % [current_moves, par_moves]
+		else:
+			moves_label.text = "PASOS: %02d" % current_moves
+
+
 # ==============================================================================
 # CARGA Y GENERACIÓN PROCEDURAL
 # ==============================================================================
@@ -694,6 +847,17 @@ func _cargar_nivel(origen: Variant) -> void:
 	initial_snapshot = board.snapshot()
 	history_stack.clear()
 	is_moving = false
+	is_defeated = false
+	current_moves = 0
+	_cerrar_notificacion_derrota()
+
+	# Calcular par óptimo mediante LevelSolver
+	var sol: Dictionary = LevelSolver.solve(level_data, 50000)
+	if sol.get("solved", false):
+		par_moves = sol["moves"].size()
+	else:
+		par_moves = 0
+	_actualizar_hud_movimientos()
 
 	# Limpiar capas visuales anteriores
 	for contenedor in [board_container, receptors_container, blocks_container]:

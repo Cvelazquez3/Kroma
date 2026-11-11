@@ -316,6 +316,45 @@ func get_receptors() -> Array:
 	return _receptors.duplicate(true)
 
 
+## Devuelve la cantidad de receptores que aún no han sido cubiertos.
+func remaining_receptors_count() -> int:
+	var count: int = 0
+	for r: Dictionary in _receptors:
+		var pos: Vector2i = r["pos"]
+		if _grid[pos.x][pos.y] != Cell.LOCKED:
+			count += 1
+	return count
+
+
+## Comprueba si el estado actual es irresoluble (derrota).
+## Criterios:
+## 1. Bloques activos insuficientes: active_block_ids().size() < remaining_receptors_count()
+##    (no hay suficientes piezas libres en juego para cubrir todos los objetivos faltantes).
+## 2. Deadlock cinemático: ningún bloque activo puede desplazarse en ninguna dirección cardinal.
+func is_defeated() -> bool:
+	var remaining: int = remaining_receptors_count()
+	if remaining == 0:
+		return false
+
+	var actives: Array = active_block_ids()
+	if actives.size() < remaining:
+		return true
+
+	var dirs: Array[Vector2i] = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
+	var can_move: bool = false
+	for id: String in actives:
+		var origin: Vector2i = _blocks[id]["pos"]
+		for d: Vector2i in dirs:
+			var dest: Vector2i = simulate_move(id, d)
+			if dest != origin:
+				can_move = true
+				break
+		if can_move:
+			break
+
+	return not can_move
+
+
 # ──────────────────────────────────────────────────────────── helpers privados ─
 
 func _empty_grid(w: int, h: int) -> Array:

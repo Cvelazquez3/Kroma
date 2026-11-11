@@ -17,6 +17,7 @@ func _init() -> void:
 	_test_reset()
 	_test_victory()
 	_test_fell_in_void()
+	_test_defeat_condition()
 	_test_determinism()
 	# Fusión cromática (GDD Página 5)
 	_test_merge_two_primaries()
@@ -193,6 +194,27 @@ func _test_fell_in_void() -> void:
 	var result := state.apply_move("b1", Vector2i.UP)
 	_check(result == BoardState.MoveResult.FELL, "bloque cayó en el abismo")
 	_check(not state.active_block_ids().has("b1"), "bloque eliminado del estado")
+	_check(state.is_defeated(), "derrota detectada: sin bloques suficientes para receptores")
+
+
+func _test_defeat_condition() -> void:
+	print("Condición de derrota e irresolubilidad:")
+	var state := _make_state()
+	_check(not state.is_defeated(), "al iniciar el nivel no hay derrota")
+
+	# Simular deadlock: encerrar el bloque entre muros
+	var data_deadlock: Dictionary = {
+		"version": 1, "id": 100, "name": "test_deadlock", "sector": 1,
+		"size": { "width": 3, "height": 3 },
+		"walls": [{ "x": 1, "y": 0 }, { "x": 1, "y": 2 }, { "x": 0, "y": 1 }, { "x": 2, "y": 1 }],
+		"voids": [],
+		"blocks": [{ "id": "b1", "x": 1, "y": 1, "color": "red" }],
+		"receptors": [{ "x": 0, "y": 0, "color": "red" }],
+	}
+	var lvl_deadlock := LevelLoader.load_from_dict(data_deadlock)
+	var state_deadlock := BoardState.new()
+	state_deadlock.init_from_level(lvl_deadlock)
+	_check(state_deadlock.is_defeated(), "deadlock detectado: bloque bloqueado en las 4 direcciones")
 
 
 func _test_determinism() -> void:
