@@ -216,6 +216,25 @@ func _test_defeat_condition() -> void:
 	state_deadlock.init_from_level(lvl_deadlock)
 	_check(state_deadlock.is_defeated(), "deadlock detectado: bloque bloqueado en las 4 direcciones")
 
+	# Derrota cromática: receptor púrpura, se pierde el bloque azul (solo queda rojo)
+	var data_chromatic: Dictionary = {
+		"version": 1, "id": 101, "name": "test_chromatic_defeat", "sector": 1,
+		"size": { "width": 5, "height": 5 },
+		"walls": [],
+		"voids": [{ "x": 2, "y": 0 }],
+		"blocks": [
+			{ "id": "b_red", "x": 0, "y": 4, "color": "red" },
+			{ "id": "b_blue", "x": 2, "y": 2, "color": "blue" }
+		],
+		"receptors": [{ "x": 4, "y": 4, "color": "purple" }],
+	}
+	var lvl_chromatic := LevelLoader.load_from_dict(data_chromatic)
+	var state_chromatic := BoardState.new()
+	state_chromatic.init_from_level(lvl_chromatic)
+	_check(not state_chromatic.is_defeated(), "al inicio con ambos primarios no hay derrota")
+	state_chromatic.apply_move("b_blue", Vector2i.UP) # cae al abismo
+	_check(state_chromatic.is_defeated(), "derrota detectada: falta azul para fusionar púrpura")
+
 
 func _test_determinism() -> void:
 	print("Determinismo: misma secuencia → mismo estado")
