@@ -345,7 +345,7 @@ func is_defeated() -> bool:
 	for id: String in actives:
 		var origin: Vector2i = _blocks[id]["pos"]
 		for d: Vector2i in dirs:
-			var dest: Vector2i = simulate_move(id, d)
+			var dest: Vector2i = preview_move(id, d)
 			if dest != origin:
 				can_move = true
 				break
