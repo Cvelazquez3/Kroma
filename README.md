@@ -145,10 +145,9 @@ Los niveles se declaran bajo el siguiente esquema en `data/levels/level_XX.json`
 ### Instrucciones de Instalación
 1. Clonar el repositorio fuente:
    ```bash
-   git clone https://github.com/bytoledo/kroma.git
+   git clone https://github.com/Cvelazquez3/Kroma.git
    cd kroma
    ```
-   *(O desde el repositorio upstream del equipo: `https://github.com/Cvelazquez3/Kroma.git`)*.
 
 2. **Inicialización en el motor:**
    * Iniciar **Godot Engine 4.x** en el entorno local.
