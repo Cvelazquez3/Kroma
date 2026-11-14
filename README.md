@@ -110,20 +110,20 @@ Durante el gameplay, el HUD proyecta en tiempo real la eficiencia del jugador (`
 
 ```mermaid
 flowchart TD
-    subgraph Capa_Logica [Lógica Pura - Sin dependencias de UI]
-        LL[LevelLoader] -->|Carga JSON / Dict| LD[LevelData DTO]
-        LD --> BS[BoardState - FSM Lógica]
-        BS -->|Valida solvencia y calcula Par| LS[LevelSolver BFS]
-        LG[LevelGenerator Procedural] -->|Produce nivel validado| LD
-    end
+	subgraph Capa_Logica [Lógica Pura - Sin dependencias de UI]
+		LL[LevelLoader] -->|Carga JSON / Dict| LD[LevelData DTO]
+		LD --> BS[BoardState - FSM Lógica]
+		BS -->|Valida solvencia y calcula Par| LS[LevelSolver BFS]
+		LG[LevelGenerator Procedural] -->|Produce nivel validado| LD
+	end
 
-    subgraph Capa_Control_Vista [Controlador y Renderizado]
-        GP[Gameplay Controller / gameplay.gd]
-        GP -->|Consulta estado / Aplica turno| BS
-        GP -->|Dispara efectos sonoros| AM[AudioManager Autoload]
-        GP -->|Instancia celdas y animaciones Tween| SC[Escena gameplay.tscn]
-        SC -->|Renderiza símbolos vectoriales| GL[Glyph Vectorial]
-    end
+	subgraph Capa_Control_Vista [Controlador y Renderizado]
+		GP[Gameplay Controller / gameplay.gd]
+		GP -->|Consulta estado / Aplica turno| BS
+		GP -->|Dispara efectos sonoros| AM[AudioManager Autoload]
+		GP -->|Instancia celdas y animaciones Tween| SC[Escena gameplay.tscn]
+		SC -->|Renderiza símbolos vectoriales| GL[Glyph Vectorial]
+	end
 ```
 
 * **Desacoplamiento Estricto:** `BoardState` no hereda de `Node` ni conoce el árbol de escenas de Godot. Toda la simulación corre sobre memoria lógica pura, asegurando determinismo absoluto (`f(estado, input) → nuevo_estado`).
