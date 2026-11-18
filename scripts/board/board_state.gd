@@ -329,17 +329,58 @@ func remaining_receptors_count() -> int:
 ## Comprueba si el estado actual es irresoluble (derrota).
 ## Criterios:
 ## 1. Bloques activos insuficientes: active_block_ids().size() < remaining_receptors_count()
-##    (no hay suficientes piezas libres en juego para cubrir todos los objetivos faltantes).
-## 2. Deadlock cinemático: ningún bloque activo puede desplazarse en ninguna dirección cardinal.
+## 2. Incompatibilidad cromática: los bloques activos disponibles son incapaces de satisfacer
+##    los colores requeridos por los receptores restantes (incluso realizando todas las fusiones posibles).
+## 3. Deadlock cinemático: ningún bloque activo puede desplazarse en ninguna dirección cardinal.
 func is_defeated() -> bool:
-	var remaining: int = remaining_receptors_count()
-	if remaining == 0:
-		return false
+	# 1. Contabilizar receptores pendientes por color
+	var req_colors: Dictionary = {
+		"red": 0, "blue": 0, "yellow": 0,
+		"purple": 0, "green": 0, "orange": 0
+	}
+	var total_remaining: int = 0
+	for r: Dictionary in _receptors:
+		var pos: Vector2i = r["pos"]
+		if _grid[pos.x][pos.y] != Cell.LOCKED:
+			var col: String = r["color"]
+			req_colors[col] = req_colors.get(col, 0) + 1
+			total_remaining += 1
+
+	if total_remaining == 0:
+		return false # Todos los receptores cubiertos -> victoria, no derrota
 
 	var actives: Array = active_block_ids()
-	if actives.size() < remaining:
+	if actives.size() < total_remaining:
 		return true
 
+	# 2. Contabilizar bloques activos disponibles por color
+	var avail_colors: Dictionary = {
+		"red": 0, "blue": 0, "yellow": 0,
+		"purple": 0, "green": 0, "orange": 0
+	}
+	for id: String in actives:
+		var col: String = _blocks[id]["color"]
+		avail_colors[col] = avail_colors.get(col, 0) + 1
+
+	# Calcular el déficit de secundarios que requiere fusiones obligatorias
+	var deficit_purple: int = maxi(0, req_colors["purple"] - avail_colors["purple"])
+	var deficit_green: int  = maxi(0, req_colors["green"] - avail_colors["green"])
+	var deficit_orange: int = maxi(0, req_colors["orange"] - avail_colors["orange"])
+
+	# Cada secundario sintetizado consume 1 bloque de cada uno de sus dos primarios
+	var needed_red: int    = req_colors["red"] + deficit_purple + deficit_orange
+	var needed_blue: int   = req_colors["blue"] + deficit_purple + deficit_green
+	var needed_yellow: int = req_colors["yellow"] + deficit_green + deficit_orange
+
+	# Si falta cualquiera de los primarios necesarios para sintetizar o encajar -> Derrota
+	if avail_colors["red"] < needed_red:
+		return true
+	if avail_colors["blue"] < needed_blue:
+		return true
+	if avail_colors["yellow"] < needed_yellow:
+		return true
+
+	# 3. Deadlock cinemático: verificar si al menos un bloque puede moverse
 	var dirs: Array[Vector2i] = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
 	var can_move: bool = false
 	for id: String in actives:

@@ -1,219 +1,208 @@
-# KROMA
+<div align="center">
 
-> Videojuego de lógica espacial minimalista en 2D desarrollado sobre Godot Engine 4.
+# KROMA · v2.0
 
-**Kroma** es una experiencia de resolución de puzles basada en cuadrículas 
-ortogonales discretas (dimensiones de 5×5 a 7×7 celdas), donde las entidades 
-activas carecen de coeficiente de fricción y se desplazan mediante inercia 
-continua sobre los cuatro ejes cardinales hasta encontrar un obstáculo perimetral
- o estructural.
+![Version](https://img.shields.io/badge/Version-v2.0-1f2430?style=for-the-badge)
+![Godot 4.x](https://img.shields.io/badge/Engine-Godot_4.x-478CBF?style=for-the-badge&logo=godotengine&logoColor=white)
+![GDScript](https://img.shields.io/badge/Language-GDScript-355570?style=for-the-badge&logo=godotengine&logoColor=white)
+![Platforms](https://img.shields.io/badge/Platforms-Windows_%C2%B7_Web_%C2%B7_Mobile-2ea44f?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
-La arquitectura del juego articula tres principios fundamentales: 
-	**desplazamiento inercial discreto**, **síntesis cromática determinista** 
-	y **mutación topológica progresiva**. Esta última determina que cada bloque 
-	encajado exitosamente en su respectiva celda receptora se petrifica, 
-	convirtiéndose en un obstáculo rígido permanente que modifica las trayectorias 
-	e introduce nuevos puntos de apoyo para las piezas restantes.
+**INERCIA · SÍNTESIS · ESPACIO**
 
----
+*Videojuego minimalista de puzles lógicos basado en inercia discreta, síntesis cromática y mutación topológica.*
 
-## Reglas Mecánicas y Síntesis Cromática
+[Visión General](#visión-general) •
+[Reglas y Álgebra](#reglas-mecánicas-y-álgebra-cromática) •
+[Modos y Reto](#campaña-simulación-y-racha-perfecta) •
+[Controles](#controles-multiplataforma) •
+[Arquitectura](#arquitectura-técnica) •
+[Estructura](#estructura-del-repositorio) •
+[Créditos](#créditos-del-estudio)
 
-1. **Inercia Discreta:** El vector cinemático de traslación se proyecta celda 
-por celda sin pérdida de energía hasta registrar impacto directo contra un muro 
-rígido, el límite perimetral del tablero o una entidad estática.
-2. **Álgebra de Síntesis Cromática:** La colisión frontal entre entidades de 
-pigmentación primaria genera una transición determinista hacia un estado secundario:
-   * 🔴 **Rojo** + 🔵 **Azul** $\rightarrow$ 🟣 **Púrpura**
-   * 🔵 **Azul** + 🟡 **Amarillo** $\rightarrow$ 🟢 **Verde**
-   * 🟡 **Amarillo** + 🔴 **Rojo** $\rightarrow$ 🟠 **Naranja**  
-   *(Las entidades secundarias resultantes constituyen estados terminales y no 
-admiten recombinación ulterior).*
-3. **Mutación Topológica:** Al consolidar un objetivo cromático sobre un receptor 
-meta, la entidad pierde movilidad y transmuta su estado a muro sólido intransitable, 
-alterando el grafo de adyacencias y habilitando nuevos giros a 90°.
-4. **Glifos Geométricos de Accesibilidad:** Implementación de simbología unívoca 
-emparejada con la paleta de color para garantizar accesibilidad universal y 
-compatibilidad con afecciones de la percepción cromática:
-   * 🔴 **Rojo:** Círculo
-   * 🔵 **Azul:** Cuadrado
-   * 🟡 **Amarillo:** Triángulo
-   * 🟣 **Púrpura:** Rombo
-   * 🟢 **Verde:** Cruz
-   * 🟠 **Naranja:** Hexágono
-5. **Abismos Estructurales (`voids`):** Celdas de disrupción topológica carentes 
-de sustrato físico. Cruzar sus coordenadas conlleva la aniquilación de la pieza 
-activa y requiere el retroceso temporal o reinicio del sector.
+</div>
 
 ---
 
-## Mapeo de Entradas y Controles
+## Visión General
 
-El esquema de control implementa amortiguación de comandos e interacción dual 
-(teclado e interfaz gráfica), con soporte para reversión temporal determinista:
+**KROMA** es un videojuego de lógica espacial 2D desarrollado en **Godot Engine 4**. El jugador opera sobre cuadrículas ortogonales discretas (`5×5` a `7×7`) donde los bloques carecen de fricción y se deslizan de forma continua hasta colisionar con muros, bordes u otras piezas.
 
-| Acción | Mapeo Primario | Mapeo Secundario / UI | Comportamiento Técnico |
-| :--- | :--- | :--- | :--- |
-| **Desplazamiento** | `W` `A` `S` `D` | `↑` `←` `↓` `→` | Aplica un vector de 
-movimiento continuo al bloque activo hasta la colisión. |
-| **Conmutación** | `Tab` | `Espacio` | Itera cíclicamente el selector de control 
-entre los bloques libres del sector. |
-| **Reversión (Undo)** | `Z` | Botón HUD | Restaura el estado inmediato anterior 
-desde la pila LIFO (`history_stack`). |
-| **Reinicio** | `R` | Botón HUD | Restablece el sector a su configuración inicial 
-de serialización. |
+El diseño combina tres pilares:
+1. **Inercia discreta:** Cada movimiento proyecta el bloque en línea recta hasta encontrar un obstáculo rígido.
+2. **Síntesis cromática determinista:** Colisionar dos colores primarios los fusiona en el color secundario correspondiente.
+3. **Mutación topológica progresiva:** Al encajar en su receptor, el bloque se bloquea (`LOCKED`) y pasa a formar parte de la geometría fija del tablero, habilitando nuevos puntos de apoyo y giros a 90°.
 
 ---
 
-## Desglose Curricular de Niveles (Sector 1)
+## Reglas Mecánicas y Álgebra Cromática
 
-* **Nivel 01 — Deslizar y Encajar ($5 \times 5$):** Introducción heurística a la 
-cinemática sin fricción, topes ortogonales y direccionamiento a metas fijas.
-* **Nivel 02 — Síntesis Cromática ($5 \times 5$):** Implementación de la interacción 
-física entre entidades para la obtención del espectro secundario requerido por el 
-receptor.
-* **Nivel 03 — Mutación Topológica ($7 \times 7$):** Escenario de tres entidades 
-y vacíos estructurales que exige planificación secuencial: el sellado de la primera 
-pieza redefine el espacio transitable para la resolución de las subsecuentes.
-* **Nivel 04 — Falla Estructural ($6 \times 6$):** Sector técnico con un foso 
-central de abismos, donde la trayectoria hacia el receptor demanda rebotes 
-perimetrales para eludir la zona de caída.
+### 1. Síntesis de Colores y Glifos Universales
+Para garantizar accesibilidad total ante daltonismo o discromatopsia, cada color está acoplado de forma unívoca a un glifo geométrico vectorial ([`glyph.gd`](scripts/view/glyph.gd)):
 
----
+| Primarios | | Secundario Resultante | Símbolo |
+| :---: | :---: | :---: | :--- |
+| 🔴 **Rojo** (`Círculo`) | + 🔵 **Azul** (`Cuadrado`) | 🟣 **Púrpura** (`Rombo`) | Fusión primaria |
+| 🔵 **Azul** (`Cuadrado`) | + 🟡 **Amarillo** (`Triángulo`) | 🟢 **Verde** (`Cruz`) | Fusión primaria |
+| 🟡 **Amarillo** (`Triángulo`) | + 🔴 **Rojo** (`Círculo`) | 🟠 **Naranja** (`Hexágono`) | Fusión primaria |
 
-## Especificación Técnica y Arquitectura
+> **Regla de conveniencia:** Los bloques secundarios son estados finales estables; al chocar contra otro secundario o un primario actúan como tope físico sin reaccionar.
 
-* **Entorno de Ejecución:** Godot Engine 4.x (renderizado 2D / Canvas Items).
-* **Simulación Determinista:** Lógica de tablero desacoplada de la jerarquía de 
-nodos mediante `BoardState`, encapsulando el cálculo discreto de posiciones y 
-colisiones.
-* **Pipeline de Datos:** Ingestión y validación estructural de archivos JSON vía 
-`LevelLoader`, asegurando integridad topológica y balances de solvencia previa 
-a la instanciación.
-* **Verificación Formal:** Algoritmo Solver basado en Búsqueda en Anchura (BFS) 
-en `LevelSolver` para la demostración matemática de solvencia y descarte de 
-situaciones de bloqueo irresoluble (*deadlocks*).
-* **Paisaje Sonoro Paramétrico:** Módulo centralizado `AudioManager` con eventos 
-de baja latencia asignados a traslación (`slide`), impacto elástico (`bump`), 
-fijación de meta (`snap`), absorción por vacío (`void`) y resolución del sector 
-(`victory`).
-* **Generación Procedural Infinita:** Algoritmo dinámico que toma el control 
-tras completar el Sector 1, generando cuadrículas procedurales con topología 
-balanceada.
-* **HUD Procedural y Respuesta Háptica:** Cálculo analítico de dimensiones en 
-tiempo de ejecución para el anclaje del banner instructivo, complementado con 
-deformaciones elásticas (*squash & stretch*) y micro-impacto visual ante vectores 
-bloqueados.
+### 2. Abismos Estructurales (`voids`) y Detección de Derrota
+Las celdas marcadas con `⤫` carecen de sustrato: cualquier bloque que pase sobre ellas queda eliminado. Tras cada turno, `BoardState` evalúa automáticamente si el sector se volvió irresoluble:
+* **Insuficiencia numérica:** Quedan menos bloques activos que receptores pendientes.
+* **Incompatibilidad cromática:** Los colores disponibles ya no pueden sintetizar los objetivos restantes.
+* **Deadlock cinemático:** Ningún bloque activo tiene movimientos válidos.
+
+Ante cualquier bloqueo, la simulación muestra el aviso de estado irresoluble con recuperación inmediata mediante **Deshacer** o **Reiniciar**.
 
 ---
 
-## Estructura del Proyecto
+## Campaña, Simulación y Racha Perfecta
+
+### Campaña Curada (Sectores 01 – 04)
+1. **Sector 01 — Inercia de Vector (`5×5`):** Introducción al desplazamiento sin fricción y frenado contra muros.
+2. **Sector 02 — Pivote y Freno (`6×6`):** Alternancia de bloques para usar piezas activas como apoyo y freno.
+3. **Sector 03 — Enlace de Espectro (`5×5`):** Síntesis cromática entre primarios para activar metas secundarias.
+4. **Sector 04 — Falla Estructural (`6×6`):** Navegación alrededor de abismos y rebotes perimetrales.
+
+Los primeros sectores integran un **tutorial interactivo dual**: un *pill* contextual que confirma cada mecánica al ejecutarla y una guía visual minimalista (marco redondeado + chevrones animados) calculada por `LevelSolver`.
+
+### Simulación Infinita por Dificultad
+Tras completar la campaña (o directamente desde el menú principal), [`LevelGenerator`](scripts/levels/level_generator.gd) produce tableros validados previamente por BFS con tres perfiles:
+
+| Dificultad | Tamaño | Pasos (Par) | Muros | Abismos | Mecánica |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Fácil** | `5×5` | `3 – 5` | `8%` | `0` | Rutas directas · 1 receptor |
+| **Normal** | `6×6` | `5 – 9` | `14%` | `1 – 3` | Bloques de apoyo · `15%` 2 acoples |
+| **Difícil** | `7×7` | `8 – 14` | `20%` | `3 – 6` | Alta densidad · `75%` 2 acoples |
+
+Cada 3 sectores superados en una misma corrida, el generador incrementa progresivamente la complejidad mínima.
+
+### Par Óptimo (BFS), Rangos y Racha Perfecta
+Al cargar cada nivel, `LevelSolver` calcula el **Par Óptimo** (`PASOS XX / PAR YY`):
+* ★★★ **Rango S (Óptimo):** `Pasos <= Par`
+* ★★☆ **Rango A (Eficiente):** `Pasos <= Par + 3`
+* ★☆☆ **Rango B (Completado):** `Pasos > Par + 3`
+
+La **Racha Perfecta** contabiliza sectores consecutivos resueltos en **Rango S**, sin usar **Deshacer**, sin **Reiniciar** y sin caer en **abismos**. El récord histórico se guarda localmente en `user://save.cfg` mediante [`GameSession`](scripts/autoload/game_session.gd).
+
+---
+
+## Controles Multiplataforma
+
+Diseñado para **PC / Web** y **Teléfono**:
+
+| Acción | Teclado (PC / Web) | Táctil / Mouse (Teléfono / Web) |
+| :--- | :---: | :--- |
+| **Mover bloque** | `W` `A` `S` `D` / `↑` `←` `↓` `→` | **Swipe** (deslizar) sobre la pantalla |
+| **Cambiar bloque** | `Tab` / `Espacio` | **Tap** directo sobre el bloque o botón `⇄ CAMBIAR` |
+| **Deshacer (Undo)** | `Z` | Botón `↶ DESHACER` en dock inferior |
+| **Reiniciar sector** | `R` | Botón `↺ REINICIAR` en dock inferior |
+| **Pausar / Menú** | `ESC` | Botón `\|\| PAUSA` arriba a la derecha |
+
+---
+
+## Arquitectura Técnica
+
+```mermaid
+flowchart TD
+	subgraph Autoloads [Estado y Servicios Globales]
+		GS[GameSession]
+		BM[BackdropManager - Fondo & Blur]
+		AM[AudioManager]
+	end
+
+	subgraph Logica_Pura [Capa Lógica - Sin dependencias de UI]
+		LL[LevelLoader] -->|Carga JSON| LD[LevelData]
+		LG[LevelGenerator] -->|Genera y valida| LD
+		LD --> BS[BoardState]
+		BS -->|Calcula Par y valida| LS[LevelSolver BFS]
+	end
+
+	subgraph Vista_Control [Escenas y Vista Glassmorphism]
+		MM[main_menu.gd] -->|Configura modo/dificultad| GS
+		GP[gameplay.gd] -->|Consulta y ejecuta| BS
+		GP -->|Usa estilos compartidos| KT[KromaTheme]
+		GP -->|Muestra modales| GO[GameplayOverlays]
+		GP -->|Guía paso inicial| TG[TutorialGuideOverlay]
+		GP -->|Dispara SFX| AM
+	end
+```
+
+* **Estética unificada (*Glassmorphism*):** [`KromaTheme`](scripts/view/kroma_theme.gd) centraliza la paleta gris carbón, tarjetas translúcidas con bisel especular, botones reactivos y el *auto-tiling* ortogonal de muros; [`BackdropManager`](scripts/autoload/backdrop_manager.gd) mantiene el fondo desenfocado continuo entre menú y partida con `frosted_blur.gdshader`.
+* **Desacoplamiento estricto:** `BoardState` y `LevelSolver` corren sobre lógica pura sin heredar de `Node`, garantizando determinismo absoluto.
+
+---
+
+## Estructura del Repositorio
 
 ```
-├
+kroma-puzzle/
 ├── assets/
-│   └── audio/              # Recursos sonoros y efectos reactivos
+│   ├── audio/                      # Efectos de sonido (.wav)
+│   ├── branding/                   # Piezas SVG modulares del imagotipo KR[O]MA
+│   └── shaders/                    # Shader de vidrio esmerilado (frosted_blur.gdshader)
 ├── data/
-│   ├── levels/             # Archivos de serialización de sectores en formato JSON
-│   └── solutions/          # Soluciones algorítmicas validadas por el solver
-├── docs/                   # Documentación técnica adicional y diagramas
-├── scenes/                 # Escenas del motor (.tscn) de tablero, entidades e interfaz
+│   ├── levels/                     # Sectores de campaña en JSON (01 a 04)
+│   └── solutions/                  # Soluciones canónicas verificadas por BFS
+├── docs/                           # Documentación técnica y reporte de gestión
+├── scenes/
+│   ├── main_menu.tscn / .gd        # Pantalla de inicio, rieles demo y modales
+│   └── gameplay.tscn / .gd         # Controlador principal de partida y tablero
 ├── scripts/
-│   ├── board/              # Lógica pura del tablero (BoardState, Solver BFS)
-│   ├── controllers/        # Controladores de entrada, flujo de juego y undo
-│   ├── levels/             # Ingestión, carga y parsing de niveles (LevelLoader)
-│   ├── tests/              # Pruebas unitarias y de solvencia
-│   ├── view/               # Renderizado del tablero, visuales de celdas y HUD
-│   ├── audio_manager.gd    # Módulo centralizado de eventos y modulación de audio
-│   └── level_generator.gd  # Generador algorítmico procedural de sectores infinitos
-├── export_presets.cfg      # Configuraciones de compilación y exportación de Godot
-├── icon.svg                # Ícono vectorizado del proyecto
-└── README.md               # Documentación técnica principal
-└── project.godot           # Proyecto de Godot
-```
----
-
-## Estructura de un Nivel (JSON)
-
-Los niveles se declaran bajo el siguiente esquema en `data/levels/level_XX.json`:
-
-```json
-{
-  "version": 1,
-  "id": 1,
-  "name": "Deslizar y Encajar",
-  "sector": 1,
-  "instruction": "INERCIA // ESQUIVA LOS MUROS CON [WASD] O [FLECHAS] Y LLEGA A LA META",
-  "size": { "width": 5, "height": 5 },
-  "walls": [
-	{ "x": 1, "y": 4 },
-	{ "x": 2, "y": 2 }
-  ],
-  "voids": [],
-  "blocks": [
-	{ "id": "b1", "x": 3, "y": 3, "color": "red" }
-  ],
-  "receptors": [
-	{ "x": 4, "y": 2, "color": "red" }
-  ]
-}
+│   ├── autoload/                   # AudioManager, GameSession, BackdropManager
+│   ├── board/                      # BoardState (FSM lógica) y LevelSolver (BFS)
+│   ├── controllers/                # Controladores auxiliares de entrada e historial
+│   ├── levels/                     # LevelData, LevelLoader, LevelGenerator
+│   ├── tests/                      # Pruebas unitarias automatizadas
+│   └── view/                       # KromaTheme, Glyph, GameplayOverlays, TutorialGuideOverlay
+├── export_presets.cfg              # Preajustes de exportación
+├── icon.svg                        # Isotipo vectorial de KROMA
+├── project.godot                   # Configuración central de Godot 4
+└── README.md                       # Documentación principal
 ```
 
-* `size`: Dimensiones mínimas de 5×5 y máximas de 7×7 celdas.
-* `walls`: Coordenadas de obstáculos rígidos que detienen la inercia.
-* `voids`: Celdas de abismo estructural donde la pieza se destruye al entrar 
-(vacío en niveles introductorios).
-* `blocks`: Entidades dinámicas con identificador unívoco, coordenadas iniciales 
-y canal cromático.
-* `receptors`: Posiciones objetivo que petrifican al bloque del color respectivo 
-al encajar.
-* `instruction`: Directiva técnica proyectada dinámicamente en el marco inferior 
-del HUD.
+---
+
+## Instalación, Ejecución y Pruebas
+
+1. Clona el repositorio y abre `project.godot` en **Godot Engine 4.x**:
+   ```bash
+   git clone https://github.com/Cvelazquez3/Kroma.git
+   cd Kroma
+   ```
+2. Presiona `F5` dentro del editor para iniciar desde la pantalla de título (`main_menu.tscn`).
+3. Para correr las pruebas unitarias de lógica en modo *headless*:
+   ```bash
+   godot --headless --path . --script res://scripts/tests/test_board_state.gd
+   godot --headless --path . --script res://scripts/tests/test_solver.gd
+   ```
 
 ---
 
-## Despliegue y Ejecución
+## Créditos del Estudio
 
-### Requisitos Previos
-* **Godot Engine 4.x** (versión Standard o .NET).
-* Cliente **Git** configurado en el entorno local.
+Desarrollado por **KROMA Dev Studio**:
 
-### Instrucciones de Instalación
-1. Clonar el repositorio fuente:
-   ```
-   git clone [https://github.com/Cvelazquez3/Kroma](https://github.com/Cvelazquez3/Kroma)]
-   cd kroma
-   ```
-2. **Inicialización en el motor:**
-   * Iniciar **Godot Engine 4.x** en el entorno local.
-   * En la ventana del Administrador de Proyectos (*Project Manager*), pulsar el
- botón **Importar** (*Import*).
-   * Localizar y seleccionar el archivo `project.godot` ubicado en la raíz del 
-repositorio clonado.
-   * Confirmar la carga del entorno mediante la opción **Importar y Editar** 
-(*Import & Edit*).
-
-3. **Compilación y Ejecución:**
-   * Presionar la tecla `F5` (o el botón de reproducción en la barra superior 
-del editor) para ejecutar el bucle principal del juego.
+* **Toledo (`bytoledo`):**
+  * Arquitectura desacoplada de partida ([`gameplay.gd`](scenes/gameplay.gd)), sistema de sesión ([`GameSession`](scripts/autoload/game_session.gd)) y persistencia de récords.
+  * Motor de generación procedural por dificultades ([`level_generator.gd`](scripts/levels/level_generator.gd)), Par Óptimo BFS y detección matemática de derrota en [`BoardState`](scripts/board/board_state.gd).
+  * Identidad visual *glassmorphism* ([`KromaTheme`](scripts/view/kroma_theme.gd)), menú principal ([`main_menu.gd`](scenes/main_menu.gd)), fondo continuo ([`BackdropManager`](scripts/autoload/backdrop_manager.gd)), branding SVG y *auto-tiling* de muros.
+  * Soporte multiplataforma (controles táctiles *swipe/tap*, dock móvil, menú de pausa) y tutorial visual interactivo ([`TutorialGuideOverlay`](scripts/view/tutorial_guide_overlay.gd)).
+  * Gestor de audio reactivo ([`AudioManager`](scripts/autoload/audio_manager.gd)) y retroalimentación cinemática (*squash & stretch* / *micro-bump*).
+* **Christian (`Cvelazquez3`):**
+  * Implementación base del cargador y validador JSON ([`LevelLoader`](scripts/levels/level_loader.gd)).
+  * Abstracción lógica inicial del estado del tablero y desarrollo del verificador algorítmico BFS ([`LevelSolver`](scripts/board/level_solver.gd)).
+* **Carlos (`Carcamp016`):**
+  * Arquitectura base del subsistema de entradas y amortiguación de comandos.
+  * Pipeline de historial para reversión temporal (`history_stack`) y maquetación inicial de HUD y secuenciación de niveles.
+* **Ian (`imartinez31`):**
+  * Diseño y especificación del sistema de glifos geométricos de accesibilidad universal ([`Glyph`](scripts/view/glyph.gd)).
+  * Modelado de la interacción cinemática de abismos estructurales (`voids`).
 
 ---
 
-## Créditos del Proyecto
+## Licencia
 
-* **Christian:** Implementación base del motor de carga JSON (`LevelLoader`), 
-abstracción lógica del estado del tablero (`BoardState`), diseño preliminar de 
-sectores y desarrollo del verificador algorítmico Solver BFS.
-* **Carlos:** Arquitectura del subsistema de control cardinal, pipeline del 
-historial para reversión temporal (`history_stack`), maquetación inicial de la 
-interfaz de usuario (HUD) y secuenciador de sectores.
-* **Ian:** Diseño y especificación del sistema de glifos geométricos de 
-accesibilidad, modelado del comportamiento físico de colisiones y gestión de 
-celdas de abismo (`voids`).
-* **Toledo:** Diseño e integración del generador algorítmico procedural para 
-sectores infinitos, desarrollo del gestor de audio reactivo (`AudioManager`), 
-pipeline de renderizado e ingestión dinámica de directivas técnicas JSON 
-(`instruction`), implementación responsiva del banner HUD sobre el marco del 
-tablero, estética y feedback visual de foco para entidades activas, 
-retroalimentación cinemática elástica (*micro-bump*) continua ante vectores 
-bloqueados y consolidación técnica del prototipo funcional v1.0.
+Distribuido bajo la **Licencia MIT**.

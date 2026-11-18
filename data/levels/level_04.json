@@ -3,7 +3,7 @@
   "id": 4,
   "name": "Falla Estructural",
   "sector": 4,
-  "instruction": "ABISMO // CAER AL VACÍO DESINTEGRA LA PIEZA • DESLIZA CON CUIDADO",
+  "instruction": "ABISMOS  ·  Evita las celdas con ⤫ o la pieza se desintegrará",
   "size": { "width": 6, "height": 6 },
   "walls": [
 	{ "x": 1, "y": 4 },

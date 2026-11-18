@@ -11,13 +11,15 @@ config_version=5
 [application]
 
 config/name="kromaPuzzle"
-run/main_scene="uid://bt610dq6yey11"
+run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
 
 [autoload]
 
-AudioManager="*uid://cxvjrobggum0w"
+AudioManager="*res://scripts/autoload/audio_manager.gd"
+GameSession="*res://scripts/autoload/game_session.gd"
+BackdropManager="*res://scripts/autoload/backdrop_manager.gd"
 
 [display]
 
@@ -69,3 +71,4 @@ restart_level={
 
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="mobile"
+environment/defaults/default_clear_color=Color(0.035, 0.045, 0.07, 1)

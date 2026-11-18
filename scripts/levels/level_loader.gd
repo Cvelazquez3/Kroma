@@ -48,7 +48,7 @@ static func load_from_dict(data: Dictionary) -> LevelData:
 	var version: Variant = _to_int(data.get("version", FORMAT_VERSION))
 	if version == null or version != FORMAT_VERSION:
 		level.errors.append("'version' no soportada (se espera %d)" % FORMAT_VERSION)
-	var id_value: Variant = _to_int(data.get("id", 0))
+	var id_value: Variant = _to_int(data.get("id", 0)) 
 	level.id = id_value if id_value != null else 0
 	level.level_name = str(data.get("name", ""))
 	var sector_value: Variant = _to_int(data.get("sector", 1))

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 160" width="600" height="160">
+  <!-- Capa 1: Tipografía base KR _ MA -->
+  <g fill="#F4F6FA" fill-rule="evenodd">
+    <!-- K -->
+    <path d="M70,45 H82 V76 L108,45 H124 L92,80 L124,115 H108 L82,84 V115 H70 Z"/>
+    <!-- R -->
+    <path d="M156,45 H188 A19,19 0 0 1 188,83 H168 V115 H156 Z M168,57 H186 A7,7 0 0 1 186,71 H168 Z"/>
+    <path d="M180,80 H194 L212,115 H198 Z"/>
+    <!-- M -->
+    <path d="M360,115 V45 H373 L396,84 L419,45 H432 V115 H420 V66 L399,101 H393 L372,66 V115 Z"/>
+    <!-- A -->
+    <path d="M489,45 H503 L528,115 H515 L508,95 H484 L477,115 H464 Z M496,60 L487,84 H505 Z"/>
+  </g>
+</svg>
