@@ -15,9 +15,78 @@ const COMBOS := [
 	{"target": "orange", "primaries": ["red", "yellow"]}
 ]
 
-static func generate_level(width: int = 6, height: int = 6, min_steps: int = 5, max_steps: int = 12, max_attempts: int = 250) -> LevelData:
+const DIFFICULTY_PRESETS := {
+	0: { # EASY
+		"width": 5,
+		"height": 5,
+		"min_steps": 3,
+		"max_steps": 5,
+		"wall_density": 0.08,
+		"min_voids": 0,
+		"max_voids": 0,
+		"extra_block_chance": 0.0,
+		"multi_receptor_chance": 0.0
+	},
+	1: { # NORMAL
+		"width": 6,
+		"height": 6,
+		"min_steps": 5,
+		"max_steps": 9,
+		"wall_density": 0.14,
+		"min_voids": 1,
+		"max_voids": 3,
+		"extra_block_chance": 0.50,
+		"multi_receptor_chance": 0.15
+	},
+	2: { # HARD
+		"width": 7,
+		"height": 7,
+		"min_steps": 8,
+		"max_steps": 14,
+		"wall_density": 0.20,
+		"min_voids": 3,
+		"max_voids": 6,
+		"extra_block_chance": 0.70,
+		"multi_receptor_chance": 0.75
+	}
+}
+
+
+static func generate_for_difficulty(difficulty: int, run_index: int = 1, max_attempts: int = 350) -> LevelData:
+	var base: Dictionary = DIFFICULTY_PRESETS.get(difficulty, DIFFICULTY_PRESETS[1])
+	var preset: Dictionary = base.duplicate()
+
+	# Escalado progresivo sutil conforme avanza la racha (cada 3 sectores suma +1 paso mínimo)
+	var step_bonus := clampi(int((max(run_index, 1) - 1) / 3), 0, 3)
+	preset["min_steps"] = int(base["min_steps"]) + step_bonus
+	preset["max_steps"] = int(base["max_steps"]) + step_bonus
+	if difficulty >= 1:
+		preset["multi_receptor_chance"] = clampf(float(base["multi_receptor_chance"]) + step_bonus * 0.08, 0.0, 0.90)
+
+	var lvl := generate_level(
+		preset["width"],
+		preset["height"],
+		preset["min_steps"],
+		preset["max_steps"],
+		max_attempts,
+		preset
+	)
+	# Fallback seguro con los parámetros base si el escalado fue demasiado estricto
+	if lvl == null and step_bonus > 0:
+		lvl = generate_level(
+			base["width"],
+			base["height"],
+			base["min_steps"],
+			base["max_steps"],
+			max_attempts,
+			base
+		)
+	return lvl
+
+
+static func generate_level(width: int = 6, height: int = 6, min_steps: int = 5, max_steps: int = 12, max_attempts: int = 250, preset: Dictionary = {}) -> LevelData:
 	for attempt in range(max_attempts):
-		var candidate: LevelData = _create_candidate_layout(width, height)
+		var candidate: LevelData = _create_candidate_layout(width, height, preset)
 		var solution: Array = solve_bfs(candidate, max_steps)
 		
 		if solution.size() >= min_steps and solution.size() <= max_steps:
@@ -27,7 +96,7 @@ static func generate_level(width: int = 6, height: int = 6, min_steps: int = 5, 
 	push_warning("No se halló un nivel con esos parámetros tras %d intentos." % max_attempts)
 	return null
 
-static func _create_candidate_layout(width: int, height: int) -> LevelData:
+static func _create_candidate_layout(width: int, height: int, preset: Dictionary = {}) -> LevelData:
 	var lvl := LevelData.new()
 	lvl.id = 99
 	lvl.sector = 99
@@ -39,10 +108,16 @@ static func _create_candidate_layout(width: int, height: int) -> LevelData:
 	lvl.receptors = []
 	lvl.blocks = []
 
+	var wall_density: float = float(preset.get("wall_density", 0.12))
+	var min_voids: int = int(preset.get("min_voids", 1))
+	var max_voids: int = int(preset.get("max_voids", 3))
+	var extra_block_chance: float = float(preset.get("extra_block_chance", 0.35))
+	var multi_receptor_chance: float = float(preset.get("multi_receptor_chance", 0.0))
+
 	var occupied: Dictionary = {}
 
-	# 1. Muros base (12% del tablero)
-	var wall_count := int((width * height) * 0.12)
+	# 1. Muros base según densidad configurada
+	var wall_count := int((width * height) * wall_density)
 	while lvl.walls.size() < wall_count:
 		var pos := Vector2i(randi_range(1, width - 2), randi_range(1, height - 2))
 		if not occupied.has(pos):
@@ -54,32 +129,17 @@ static func _create_candidate_layout(width: int, height: int) -> LevelData:
 	var target_color: String = recipe["target"]
 	var primaries: Array = recipe["primaries"]
 
-	# 3. Receptor con freno garantizado (Backstop)
+	# 3. Receptor principal con freno garantizado (Backstop)
 	var receptor_pos := _get_random_free_edge_pos(width, height, occupied)
 	occupied[receptor_pos] = true
 	lvl.receptors.append({
 		"pos": receptor_pos,
 		"color": target_color
 	})
+	_ensure_receptor_backstop(receptor_pos, width, height, occupied, lvl.walls)
 
-	# Si el receptor no está en un borde exterior, colocarle un muro adyacente para frenar la inercia
-	var is_on_edge := (receptor_pos.x == 0 or receptor_pos.x == width - 1 or receptor_pos.y == 0 or receptor_pos.y == height - 1)
-	if not is_on_edge:
-		for offset: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
-			var wall_back: Vector2i = receptor_pos + offset
-			if wall_back.x >= 0 and wall_back.x < width and wall_back.y >= 0 and wall_back.y < height:
-				if not occupied.has(wall_back):
-					occupied[wall_back] = true
-					lvl.walls.append(wall_back)
-					break
-			if wall_back.x >= 0 and wall_back.x < width and wall_back.y >= 0 and wall_back.y < height:
-				if not occupied.has(wall_back):
-					occupied[wall_back] = true
-					lvl.walls.append(wall_back)
-					break
-
-	# 4. Abismos (Voids): 1 a 3 abismos que no toquen directamente al receptor
-	var void_count := randi_range(1, 3)
+	# 4. Abismos (Voids) que no toquen directamente al receptor
+	var void_count := randi_range(min_voids, max_voids)
 	var voids_placed := 0
 	var void_attempts := 0
 	while voids_placed < void_count and void_attempts < 40:
@@ -91,27 +151,61 @@ static func _create_candidate_layout(width: int, height: int) -> LevelData:
 			voids_placed += 1
 
 	# 5. Bloques primarios de la receta
+	var next_block_idx := 1
 	for i in range(primaries.size()):
 		var p_pos := _get_random_free_pos(width, height, occupied)
 		occupied[p_pos] = true
 		lvl.blocks.append({
-			"id": "b%d" % (i + 1),
+			"id": "b%d" % next_block_idx,
 			"color": primaries[i],
 			"pos": p_pos
 		})
+		next_block_idx += 1
 
-	# 6. Bloque neutro / obstáculo móvil opcional (35% de probabilidad)
-	if randf() < 0.35:
+	# 6. Segundo acople opcional en dificultad alta (receptor + bloque primario extra)
+	if randf() < multi_receptor_chance:
+		var second_color: String = "yellow" if not primaries.has("yellow") else "blue"
+		var rec2_pos := _get_random_free_edge_pos(width, height, occupied)
+		occupied[rec2_pos] = true
+		lvl.receptors.append({
+			"pos": rec2_pos,
+			"color": second_color
+		})
+		_ensure_receptor_backstop(rec2_pos, width, height, occupied, lvl.walls)
+
+		var blk2_pos := _get_random_free_pos(width, height, occupied)
+		occupied[blk2_pos] = true
+		lvl.blocks.append({
+			"id": "b%d" % next_block_idx,
+			"color": second_color,
+			"pos": blk2_pos
+		})
+		next_block_idx += 1
+	elif randf() < extra_block_chance:
+		# Bloque neutro / obstáculo móvil opcional
 		var extra_color: String = "yellow" if not primaries.has("yellow") else "blue"
 		var extra_pos := _get_random_free_pos(width, height, occupied)
 		occupied[extra_pos] = true
 		lvl.blocks.append({
-			"id": "b3",
+			"id": "b%d" % next_block_idx,
 			"color": extra_color,
 			"pos": extra_pos
 		})
 
 	return lvl
+
+
+static func _ensure_receptor_backstop(receptor_pos: Vector2i, width: int, height: int, occupied: Dictionary, walls: Array) -> void:
+	var is_on_edge := (receptor_pos.x == 0 or receptor_pos.x == width - 1 or receptor_pos.y == 0 or receptor_pos.y == height - 1)
+	if is_on_edge:
+		return
+	for offset: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+		var wall_back: Vector2i = receptor_pos + offset
+		if wall_back.x >= 0 and wall_back.x < width and wall_back.y >= 0 and wall_back.y < height:
+			if not occupied.has(wall_back):
+				occupied[wall_back] = true
+				walls.append(wall_back)
+				return
 
 static func _get_random_free_edge_pos(w: int, h: int, occupied: Dictionary) -> Vector2i:
 	for _i in range(100):
@@ -132,7 +226,7 @@ static func _get_random_free_pos(w: int, h: int, occupied: Dictionary) -> Vector
 
 # --- SOLVER BFS CON CAÍDA A ABISMOS Y FUSIONES ---
 
-static func solve_bfs(lvl: LevelData, max_depth: int) -> Array:
+static func solve_bfs(lvl: LevelData, max_depth: int, max_states: int = 4000) -> Array:
 	var initial_board := BoardState.new()
 	initial_board.init_from_level(lvl)
 
@@ -150,6 +244,8 @@ static func solve_bfs(lvl: LevelData, max_depth: int) -> Array:
 	visited[root_key] = true
 
 	while not queue.is_empty():
+		if visited.size() >= max_states:
+			return []
 		var current: Dictionary = queue.pop_front()
 		
 		if current["depth"] >= max_depth:
@@ -173,6 +269,10 @@ static func solve_bfs(lvl: LevelData, max_depth: int) -> Array:
 					var final_path: Array = current["path"].duplicate()
 					final_path.append({"block": b_id, "dir": dir})
 					return final_path
+
+				# Poda temprana: si cayó en un abismo y el tablero ya es irresoluble, no expandir esta rama
+				if result == BoardState.MoveResult.FELL and sim_board.is_defeated():
+					continue
 				
 				# Si el bloque cayó a un vacío y dejó el nivel sin solución inmediata, el estado no aporta
 				var next_snap := sim_board.snapshot()

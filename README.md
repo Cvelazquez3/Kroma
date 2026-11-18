@@ -1,223 +1,208 @@
-# KROMA // Spatial Logic & Chromatic Synthesis
+# KROMA · v2.0
 
 <div align="center">
 
+![Version](https://img.shields.io/badge/Version-v2.0-1f2430?style=for-the-badge)
 ![Godot 4.x](https://img.shields.io/badge/Engine-Godot_4.x-478CBF?style=for-the-badge&logo=godotengine&logoColor=white)
 ![GDScript](https://img.shields.io/badge/Language-GDScript-355570?style=for-the-badge&logo=godotengine&logoColor=white)
-![Platform](https://img.shields.io/badge/Platform-Windows_Desktop-0078D6?style=for-the-badge&logo=windows&logoColor=white)
-![Architecture](https://img.shields.io/badge/Architecture-Decoupled_FSM-2ea44f?style=for-the-badge)
+![Platforms](https://img.shields.io/badge/Platforms-Windows_%C2%B7_Web_%C2%B7_Mobile-2ea44f?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
-**Experiencia minimalista de resolución de puzles basada en inercia discreta, síntesis cromática y mutación topológica.**
+**INERTIA · SYNTHESIS · SPACE**
 
-[Características](#visión-general-del-proyecto) •
-[Reglas del Juego](#reglas-mecánicas-y-álgebra-cromática) •
-[Arquitectura Técnica](#especificación-técnica-y-arquitectura) •
-[Estructura del Proyecto](#estructura-del-repositorio) •
-[Despliegue y Ejecución](#instalación-y-ejecución) •
-[Créditos](#créditos-del-estudio)
+*Minimalist logic puzzle game built around discrete inertia, chromatic synthesis, and topological mutation.*
 
----
+[Overview](#overview) •
+[Rules & Algebra](#mechanics-and-chromatic-algebra) •
+[Modes & Challenge](#campaign-simulation-and-perfect-streak) •
+[Controls](#multiplatform-controls) •
+[Architecture](#technical-architecture) •
+[Repository](#repository-structure) •
+[Credits](#studio-credits)
 
 </div>
 
-## Visión General del Proyecto
+---
 
-**KROMA** es un videojuego de lógica espacial en dos dimensiones desarrollado sobre **Godot Engine 4**. El jugador opera sobre cuadrículas ortogonales discretas (de $5\times 5$ a $7\times 7$ celdas) donde las entidades activas carecen de coeficiente de fricción, proyectándose de forma continua a lo largo de los cuatro ejes cardinales hasta colisionar contra obstáculos perimetrales o estructurales.
+## Overview
 
-El diseño del juego articula tres principios fundamentales:
-1. **Desplazamiento inercial discreto:** La fuerza cinética no decae hasta encontrar un obstáculo rígido o borde del mapa.
-2. **Síntesis cromática determinista:** La interacción física entre primarios genera colores secundarios irreducibles.
-3. **Mutación topológica progresiva:** Al resolver un objetivo, la pieza encajada se transmuta en un muro rígido permanente (`LOCKED`), reconfigurando en tiempo real el grafo de trayectorias transitables y habilitando nuevos giros a 90°.
+**KROMA** is a 2D spatial logic puzzle game built in **Godot Engine 4**. Players operate on discrete orthogonal grids (`5×5` to `7×7`) where blocks have zero friction and slide continuously until colliding with walls, board boundaries, or other pieces.
+
+The design articulates three core principles:
+1. **Discrete inertia:** Every move projects the active block in a straight line until it hits a rigid obstacle.
+2. **Deterministic chromatic synthesis:** Colliding two primary colors merges them into the corresponding secondary color.
+3. **Progressive topological mutation:** Upon locking into a matching receptor, a block becomes `LOCKED` and turns into permanent board geometry, creating new 90° pivot and braking points.
 
 ---
 
-## Reglas Mecánicas y Álgebra Cromática
+## Mechanics and Chromatic Algebra
 
-### 1. Inercia Discreta y Colisiones
-* Cada bloque activo se desplaza celda por celda sin pérdida de energía mediante raycasting lógico discreto.
-* El frenado se produce en la celda previa al impactar contra un muro estático, un bloque encajado o el borde perimetral del tablero.
+### 1. Color Synthesis and Universal Glyphs
+To ensure full accessibility for color-vision deficiencies, every chromatic channel is uniquely paired with a geometric vector glyph ([`glyph.gd`](scripts/view/glyph.gd)):
 
-### 2. Álgebra de Síntesis Cromática
-La colisión frontal entre entidades de pigmentación primaria genera una transición determinista hacia un estado secundario:
-
-$$\begin{aligned}
-\text{🔴 Rojo} &+ \text{🔵 Azul} &\longrightarrow &\text{ 🟣 Púrpura} \\
-\text{🔵 Azul} &+ \text{🟡 Amarillo} &\longrightarrow &\text{ 🟢 Verde} \\
-\text{🟡 Amarillo} &+ \text{🔴 Rojo} &\longrightarrow &\text{ 🟠 Naranja}
-\end{aligned}$$
-
-> **Regla de Conveniencia:** Las entidades secundarias resultantes constituyen estados terminales estables; colisionar dos secundarios o un secundario contra un primario no genera reacción y actúa como tope físico rígido.
-
-### 3. Glifos Geométricos de Accesibilidad Universal
-Para garantizar la accesibilidad integral y el juego sin barreras para personas con deficiencias en la percepción del color (daltonismo y discromatopsia), cada canal cromático está acoplado de forma unívoca a un glifo geométrico vectorial:
-
-| Tono | Canal Cromático | Símbolo Geométrico | Comportamiento |
+| Primaries | | Resulting Secondary | Role |
 | :---: | :---: | :---: | :--- |
-| 🔴 | **Rojo** | `Círculo` | Entidad Primaria |
-| 🔵 | **Azul** | `Cuadrado` | Entidad Primaria |
-| 🟡 | **Amarillo** | `Triángulo` | Entidad Primaria |
-| 🟣 | **Púrpura** | `Rombo` | Síntesis Secundaria (Rojo + Azul) |
-| 🟢 | **Verde** | `Cruz` | Síntesis Secundaria (Azul + Amarillo) |
-| 🟠 | **Naranja** | `Hexágono` | Síntesis Secundaria (Amarillo + Rojo) |
+| 🔴 **Red** (`Circle`) | + 🔵 **Blue** (`Square`) | 🟣 **Purple** (`Diamond`) | Primary synthesis |
+| 🔵 **Blue** (`Square`) | + 🟡 **Yellow** (`Triangle`) | 🟢 **Green** (`Cross`) | Primary synthesis |
+| 🟡 **Yellow** (`Triangle`) | + 🔴 **Red** (`Circle`) | 🟠 **Orange** (`Hexagon`) | Primary synthesis |
 
-### 4. Abismos Estructurales (`voids`)
-Celdas de disrupción topológica carentes de sustrato físico. Si una pieza cruza sus coordenadas, es aniquilada de inmediato fuera de la simulación.
+> **Convenience rule:** Secondary blocks are stable terminal states; colliding against another secondary or a primary acts as a rigid stop with no reaction.
 
-### 5. Detección Formal de Derrota (*Fail State*)
-El motor lógico (`BoardState`) evalúa matemáticamente el tablero después de cada acción para prevenir estados "zombi" e informar de inmediato al usuario cuando el sector se vuelve irresoluble:
-* **Insuficiencia Numérica:** $\text{Bloques Libres} < \text{Receptores Pendientes}$.
-* **Incompatibilidad Cromática:** La pérdida de una pieza primaria en un abismo impide sintetizar el color exacto exigido por los receptores restantes.
-* **Deadlock Cinemático:** Ninguna entidad activa dispone de movimientos válidos en ninguno de los cuatro ejes cardinales.
-* **Feedback de Recuperación:** Bloqueo de inputs de traslación, notificación visual en pantalla y recuperación inmediata mediante `[Z]` Deshacer o `[R]` Reiniciar.
+### 2. Structural Voids (`voids`) and Defeat Detection
+Cells marked with `⤫` have no floor: any block crossing them is immediately destroyed. After every move, `BoardState` mathematically evaluates whether the sector has become unsolvable:
+* **Numeric insufficiency:** Fewer active blocks remain than pending receptors.
+* **Chromatic incompatibility:** Remaining primary blocks can no longer synthesize the required target colors.
+* **Kinematic deadlock:** No active block has any valid move in any cardinal direction.
+
+Whenever a deadlock occurs, the simulation displays an unsolvable-state overlay with instant recovery via **Undo** or **Restart**.
 
 ---
 
-## Mapeo de Entradas y Controles
+## Campaign, Simulation, and Perfect Streak
 
-| Comando | Teclado Primario | Mapeo Alternativo / UI | Función Técnica |
-| :--- | :---: | :---: | :--- |
-| **Desplazamiento** | `W` `A` `S` `D` | `↑` `←` `↓` `→` | Proyecta vector cardinal continuo hasta colisión. |
-| **Conmutación** | `Tab` | `Espacio` | Itera cíclicamente entre los bloques activos libres. |
-| **Deshacer (Undo)** | `Z` | Botón HUD | Restaura el snapshot inmediato anterior desde la pila LIFO. |
-| **Reiniciar Sector** | `R` | Botón HUD | Restablece el tablero a su configuración inicial. |
+### Curated Campaign (Sectors 01 – 04)
+1. **Sector 01 — Vector Inertia (`5×5`):** Introduction to frictionless sliding and wall braking.
+2. **Sector 02 — Pivot and Brake (`6×6`):** Switching between blocks to use active pieces as physical stops.
+3. **Sector 03 — Spectrum Link (`5×5`):** Chromatic synthesis between primaries to activate secondary goals.
+4. **Sector 04 — Structural Fault (`6×6`):** Navigating around void pits and mandatory perimeter rebounds.
 
----
+The opening sectors feature a **dual interactive tutorial**: a contextual pill that confirms each mechanic upon execution, plus a minimalist visual guide (pulsing rounded frame + animated chevrons) driven by `LevelSolver`.
 
-## Condición de Reto y Evaluación por Estrellas (Solver BFS)
+### Endless Procedural Simulation by Difficulty
+After completing the campaign (or directly from the main menu), [`LevelGenerator`](scripts/levels/level_generator.gd) builds BFS-verified boards across three presets:
 
-El juego integra un verificador formal algorítmico basado en **Búsqueda en Anchura (BFS)** en `LevelSolver`. Al cargar cualquier sector, el solver determina de forma determinista la cantidad mínima absoluta de pasos necesarios para resolverlo (**Par Óptimo**).
+| Difficulty | Grid | Par Moves | Walls | Voids | Mechanics |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Easy** | `5×5` | `3 – 5` | `8%` | `0` | Direct routes · 1 receptor |
+| **Normal** | `6×6` | `5 – 9` | `14%` | `1 – 3` | Support blocks · `15%` dual receptors |
+| **Hard** | `7×7` | `8 – 14` | `20%` | `3 – 6` | High wall density · `75%` dual receptors |
 
-Durante el gameplay, el HUD proyecta en tiempo real la eficiencia del jugador (`PASOS: XX // PAR: YY`). Al completar el sector, se evalúa el desempeño bajo tres rangos:
+Every 3 cleared sectors in a single run, the generator progressively scales minimum step complexity.
 
-* ⭐⭐⭐ **Rango S (Óptimo):** Resuelto en exactamente la cantidad óptima de movimientos ($\text{Pasos} \le \text{Par}$).
-* ⭐⭐ **Rango A (Eficiente):** Resuelto con margen técnico de maniobra ($\text{Pasos} \le \text{Par} + 3$).
-* ⭐ **Rango B (Completado):** Nivel resuelto superando el margen del solver ($\text{Pasos} > \text{Par} + 3$).
+### Optimal Par (BFS), Ranks, and Perfect Streak
+On level load, `LevelSolver` computes the **Optimal Par** (`MOVES XX / PAR YY`):
+* ★★★ **Rank S (Optimal):** `Moves <= Par`
+* ★★☆ **Rank A (Efficient):** `Moves <= Par + 3`
+* ★☆☆ **Rank B (Cleared):** `Moves > Par + 3`
 
----
-
-## Curva de Niveles y Modo Infinito Procedural
-
-1. **Nivel 01 — Deslizar y Encajar ($5 \times 5$):** Introducción heurística a la inercia sin fricción, muros fijos y receptores.
-2. **Nivel 02 — Síntesis Cromática ($5 \times 5$):** Introducción a la interacción física entre primarios para generar el espectro secundario requerido por la meta.
-3. **Nivel 03 — Mutación Topológica ($7 \times 7$):** Escenario de múltiples piezas y vacíos estructurales que exige planificación secuencial: el orden de encaje redefine los muros para las piezas restantes.
-4. **Nivel 04 — Falla Estructural ($6 \times 6$):** Sector técnico con foso central de abismos y rebotes perimetrales obligatorios.
-5. **Simulación Procedural Infinita:** Algoritmo dinámico en `LevelGenerator` que toma el control tras la campaña, generando cuadrículas infinitas balanceadas con validación formal BFS previa en tiempo real.
+The **Perfect Streak** tracks consecutive sectors cleared in **Rank S**, without using **Undo**, without **Restart**, and without falling into **voids**. The all-time record is persisted locally in `user://save.cfg` via [`GameSession`](scripts/autoload/game_session.gd).
 
 ---
 
-## Especificación Técnica y Arquitectura
+## Multiplatform Controls
+
+Designed for **Desktop / Web** and **Mobile**:
+
+| Action | Keyboard (PC / Web) | Touch / Mouse (Mobile / Web) |
+| :--- | :---: | :--- |
+| **Move block** | `W` `A` `S` `D` / `↑` `←` `↓` `→` | **Swipe** across the screen |
+| **Switch block** | `Tab` / `Space` | **Tap** directly on a block or `⇄ CAMBIAR` button |
+| **Undo move** | `Z` | `↶ DESHACER` button on bottom dock |
+| **Restart sector** | `R` | `↺ REINICIAR` button on bottom dock |
+| **Pause / Menu** | `ESC` | `\|\| PAUSA` button at top-right |
+
+---
+
+## Technical Architecture
 
 ```mermaid
 flowchart TD
-	subgraph Capa_Logica [Lógica Pura - Sin dependencias de UI]
-		LL[LevelLoader] -->|Carga JSON / Dict| LD[LevelData DTO]
-		LD --> BS[BoardState - FSM Lógica]
-		BS -->|Valida solvencia y calcula Par| LS[LevelSolver BFS]
-		LG[LevelGenerator Procedural] -->|Produce nivel validado| LD
+	subgraph Autoloads [Global State & Services]
+		GS[GameSession]
+		BM[BackdropManager - Background & Blur]
+		AM[AudioManager]
 	end
 
-	subgraph Capa_Control_Vista [Controlador y Renderizado]
-		GP[Gameplay Controller / gameplay.gd]
-		GP -->|Consulta estado / Aplica turno| BS
-		GP -->|Dispara efectos sonoros| AM[AudioManager Autoload]
-		GP -->|Instancia celdas y animaciones Tween| SC[Escena gameplay.tscn]
-		SC -->|Renderiza símbolos vectoriales| GL[Glyph Vectorial]
+	subgraph Pure_Logic [Pure Logic Layer - UI-Independent]
+		LL[LevelLoader] -->|Loads JSON| LD[LevelData]
+		LG[LevelGenerator] -->|Generates & validates| LD
+		LD --> BS[BoardState]
+		BS -->|Computes Par & solvability| LS[LevelSolver BFS]
+	end
+
+	subgraph View_Control [Scenes & Glassmorphism UI]
+		MM[main_menu.gd] -->|Sets mode/difficulty| GS
+		GP[gameplay.gd] -->|Queries & steps| BS
+		GP -->|Shared styles| KT[KromaTheme]
+		GP -->|Modal overlays| GO[GameplayOverlays]
+		GP -->|Initial step guide| TG[TutorialGuideOverlay]
+		GP -->|Triggers SFX| AM
 	end
 ```
 
-* **Desacoplamiento Estricto:** `BoardState` no hereda de `Node` ni conoce el árbol de escenas de Godot. Toda la simulación corre sobre memoria lógica pura, asegurando determinismo absoluto (`f(estado, input) → nuevo_estado`).
-* **Controlador General (`gameplay.gd`):** Escena unificada desacoplada que gestiona indistintamente sectores serializados en JSON o tableros generados algorítmicamente.
-* **Paisaje Sonoro Paramétrico:** Autoload `AudioManager.gd` que modula pitch y atenuación de baja latencia ante eventos cinemáticos (`slide`, `bump`, `snap`, `void`, `undo`, `victory`).
-* **Respuesta Háptica Visual:** Animaciones procedurales de deformación elástica (*squash & stretch*) al deslizarse y micro-impactos (*micro-bump*) al colisionar contra muros.
+* **Unified Glassmorphism Aesthetic:** [`KromaTheme`](scripts/view/kroma_theme.gd) centralizes the charcoal glass palette, specular-bevel cards, reactive buttons, and orthogonal wall auto-tiling; [`BackdropManager`](scripts/autoload/backdrop_manager.gd) keeps a continuous blurred grid and level-reactive ambient halo across scenes using `frosted_blur.gdshader`.
+* **Strict Decoupling:** `BoardState` and `LevelSolver` run on pure logic without inheriting from `Node`, ensuring deterministic simulation.
 
 ---
 
-## Estructura del Repositorio
+## Repository Structure
 
 ```
 kroma-puzzle/
 ├── assets/
-│   └── audio/              # Efectos de sonido paramétricos (.wav y .import)
+│   ├── audio/                      # Parametric sound effects (.wav)
+│   ├── branding/                   # Modular SVG pieces of the KR[O]MA logo
+│   └── shaders/                    # Frosted glass blur shader (frosted_blur.gdshader)
 ├── data/
-│   ├── levels/             # Archivos JSON de serialización de sectores (01 a 04)
-│   └── solutions/          # Soluciones canónicas validadas por el solver BFS
-├── docs/                   # Documentación técnica adicional y reportes de gestión
-├── scenes/                 # Escenas del motor (.tscn)
-│   ├── gameplay.gd         # Controlador universal de partida y vista del tablero
-│   ├── gameplay.tscn       # Escena principal de simulación
-│   ├── glyph_preview.tscn  # Vista previa de glifos geométricos
-│   └── test_input.tscn     # Escena de calibración de controles
+│   ├── levels/                     # Campaign sector definitions in JSON (01 to 04)
+│   └── solutions/                  # Canonical BFS-verified solutions
+├── docs/                           # Technical documentation and management report
+├── scenes/
+│   ├── main_menu.tscn / .gd        # Title screen, demo side rails, and modals
+│   └── gameplay.tscn / .gd         # Main gameplay controller and board view
 ├── scripts/
-│   ├── board/              # Lógica pura desacoplada (BoardState, LevelSolver BFS)
-│   ├── controllers/        # Controladores de entrada cardinal e historial Undo
-│   ├── levels/             # Parser JSON, validadores de integridad (LevelLoader, LevelData)
-│   ├── tests/              # Suite completa de pruebas unitarias automatizadas
-│   ├── view/               # Renderizado de celdas, glifos vectoriales y HUD
-│   ├── audio_manager.gd    # Gestor reactivo de audio y modulación
-│   └── level_generator.gd  # Generador procedural de sectores infinitos
-├── export_presets.cfg      # Preajustes de compilación y empaquetado para Windows
-├── icon.svg                # Isotipo vectorial del proyecto
-├── project.godot           # Archivo de configuración central del motor Godot 4
-└── README.md               # Documentación técnica principal
+│   ├── autoload/                   # AudioManager, GameSession, BackdropManager
+│   ├── board/                      # BoardState (logic FSM) and LevelSolver (BFS)
+│   ├── controllers/                # Input and history helper controllers
+│   ├── levels/                     # LevelData, LevelLoader, LevelGenerator
+│   ├── tests/                      # Automated headless unit test suite
+│   └── view/                       # KromaTheme, Glyph, GameplayOverlays, TutorialGuideOverlay
+├── export_presets.cfg              # Export presets
+├── icon.svg                        # KROMA vector icon
+├── project.godot                   # Godot 4 project configuration
+└── README.md                       # Main documentation
 ```
 
 ---
 
-## Instalación y Ejecución
+## Installation, Running, and Tests
 
-### Requisitos Previos
-* **Godot Engine 4.x** (Versión Standard recomendada).
-* **Git** instalado en el sistema local.
-
-### 1. Clonación del Repositorio
-```bash
-git clone https://github.com/bytoledo/kroma.git
-cd kroma
-```
-
-### 2. Apertura en Godot Engine
-1. Inicia **Godot Engine 4.x**.
-2. En el Administrador de Proyectos (*Project Manager*), presiona el botón **Importar** (*Import*).
-3. Selecciona el archivo `project.godot` ubicado en la raíz de la carpeta clonada.
-4. Presiona **Importar y Editar** (*Import & Edit*).
-
-### 3. Compilación y Ejecución
-* Presiona `F5` dentro del editor (o el botón de reproducción superior) para ejecutar la simulación principal.
-
-### 4. Ejecución de Pruebas Unitarias Automatizadas
-Las pruebas de lógica de tablero y algoritmos BFS pueden ejecutarse directamente por consola en modo headless:
-```bash
-godot --headless --path . --script res://scripts/tests/test_board_state.gd
-godot --headless --path . --script res://scripts/tests/test_solver.gd
-```
+1. Clone the repository and open `project.godot` in **Godot Engine 4.x**:
+   ```bash
+   git clone https://github.com/bytoledo/kroma.git
+   cd kroma
+   ```
+2. Press `F5` in the editor to launch from the title screen (`main_menu.tscn`).
+3. Run the headless logic unit tests:
+   ```bash
+   godot --headless --path . --script res://scripts/tests/test_board_state.gd
+   godot --headless --path . --script res://scripts/tests/test_solver.gd
+   ```
 
 ---
 
-## Créditos del Estudio
+## Studio Credits
 
-Desarrollado por:
+Developed by **KROMA Dev Studio**:
 
-* **Toledo (bytoledo):**
-  * Arquitectura general del sistema y controlador desacoplado de partida ([`gameplay.gd`](scenes/gameplay.gd)).
-  * Detección matemática de derrota por pérdida de piezas, incompatibilidad cromática y *deadlocks* en [`BoardState.gd`](scripts/board/board_state.gd).
-  * Diseño del motor de generación procedural para cuadrículas infinitas ([`level_generator.gd`](scripts/level_generator.gd)).
-  * Implementación del gestor de audio reactivo ([`AudioManager.gd`](scripts/audio_manager.gd)) y efectos hápticos de colisión (*squash & stretch* / *micro-bump*).
-  * Sistema de cuantificación de reto: Par Óptimo BFS y evaluación por estrellas.
-  * Consolidación de builds, resolución de conflictos Git y mantenimiento de versiones.
-* **Christian (Cvelazquez3):**
-  * Implementación base del cargador y validador de datos JSON ([`LevelLoader.gd`](scripts/levels/level_loader.gd)).
-  * Abstracción lógica inicial del estado del tablero y desarrollo del verificador algorítmico BFS ([`level_solver.gd`](scripts/board/level_solver.gd)).
-* **Carlos (Carcamp016):**
-  * Arquitectura del subsistema de entradas y amortiguación de comandos.
-  * Pipeline de historial de snapshots para reversión temporal (`history_stack`).
-  * Maquetación estructural de interfaces HUD y secuenciación de niveles.
-* **Ian (imartinez31):**
-  * Diseño y especificación del sistema de glifos geométricos de accesibilidad universal ([`glyph.gd`](scripts/view/glyph.gd)).
-  * Modelado de la interacción cinemática de abismos estructurales (`voids`).
+* **Toledo (`bytoledo`):**
+  * Decoupled gameplay architecture ([`gameplay.gd`](scenes/gameplay.gd)), session state ([`GameSession`](scripts/autoload/game_session.gd)), and record persistence.
+  * Difficulty-scaled procedural generator ([`level_generator.gd`](scripts/levels/level_generator.gd)), BFS Optimal Par, and mathematical defeat detection in [`BoardState`](scripts/board/board_state.gd).
+  * Glassmorphism visual system ([`KromaTheme`](scripts/view/kroma_theme.gd)), main menu ([`main_menu.gd`](scenes/main_menu.gd)), continuous backdrop ([`BackdropManager`](scripts/autoload/backdrop_manager.gd)), SVG branding, and wall auto-tiling.
+  * Multiplatform support (touch swipe/tap controls, mobile dock, pause overlay) and interactive visual tutorial ([`TutorialGuideOverlay`](scripts/view/tutorial_guide_overlay.gd)).
+  * Reactive audio manager ([`AudioManager`](scripts/autoload/audio_manager.gd)) and kinetic feedback (*squash & stretch* / *micro-bump*).
+* **Christian (`Cvelazquez3`):**
+  * Base implementation of the JSON loader and validator ([`LevelLoader`](scripts/levels/level_loader.gd)).
+  * Initial board state abstraction and algorithmic BFS verifier ([`LevelSolver`](scripts/board/level_solver.gd)).
+* **Carlos (`Carcamp016`):**
+  * Base input subsystem and command buffering architecture.
+  * Undo history pipeline (`history_stack`) and initial HUD / level sequencing layout.
+* **Ian (`imartinez31`):**
+  * Design and specification of the universal accessibility geometric glyph system ([`Glyph`](scripts/view/glyph.gd)).
+  * Kinematic modeling of structural voids (`voids`).
 
 ---
 
-## Licencia
+## License
 
-Este proyecto se distribuye bajo los términos de la Licencia MIT. Consulta el archivo `LICENSE` para más información.
+Distributed under the **MIT License**.

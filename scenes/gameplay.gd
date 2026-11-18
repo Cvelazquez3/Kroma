@@ -1,26 +1,9 @@
 extends Node2D
 
-# ==============================================================================
-# CONSTANTES Y CONFIGURACIÓN BASE
-# ==============================================================================
+## Controlador principal de partida: coordina BoardState, tablero visual, HUD, entrada y tutorial.
 
 const BASE_CELL_SIZE := 80.0
-
-const COLOR_MAP := {
-	"red": Color(0.95, 0.22, 0.25),
-	"blue": Color(0.20, 0.50, 1.00),
-	"yellow": Color(1.00, 0.82, 0.15),
-	"purple": Color(0.68, 0.25, 0.95),
-	"green": Color(0.20, 0.88, 0.45),
-	"orange": Color(1.00, 0.55, 0.12),
-	"empty": Color(0.15, 0.15, 0.12, 0.22),
-	"wall": Color(0.24, 0.26, 0.32, 1.00),
-	"void": Color(0.00, 0.00, 0.00, 0.0)
-}
-
-# ==============================================================================
-# VARIABLES DE ESTADO
-# ==============================================================================
+const SWIPE_THRESHOLD := 32.0
 
 var cell_size: float = BASE_CELL_SIZE
 var level_data: LevelData
@@ -29,6 +12,8 @@ var board: BoardState
 var block_nodes: Dictionary = {}
 var is_moving: bool = false
 var is_defeated: bool = false
+var is_paused: bool = false
+var run_is_perfect: bool = true
 var bloque_seleccionado: String = ""
 
 var history_stack: Array = []
@@ -38,9 +23,26 @@ var current_moves: int = 0
 var par_moves: int = 0
 
 var defeat_canvas: CanvasLayer = null
+var pause_canvas: CanvasLayer = null
 var moves_label: Label = null
+var streak_label: Label = null
+var streak_pill: PanelContainer = null
 
-# Referencias a nodos
+# Tutorial interactivo (pill inferior + guía visual sobre bloques)
+var tutorial_wrap: CenterContainer = null
+var tutorial_pill: PanelContainer = null
+var tutorial_label: Label = null
+var tutorial_dot: Label = null
+var tutorial_done: bool = false
+var _tutorial_solution: Array = []
+var _tutorial_step_idx: int = 0
+var _tutorial_guide: TutorialGuideOverlay = null
+
+# Seguimiento táctil / mouse para swipe y tap
+var _touch_start_pos: Vector2 = Vector2.ZERO
+var _is_touch_active: bool = false
+var _swipe_triggered: bool = false
+
 @onready var board_container: Node2D = $BoardContainer
 @onready var receptors_container: Node2D = $ReceptorsContainer
 @onready var blocks_container: Node2D = $BlocksContainer
@@ -51,254 +53,256 @@ var moves_label: Label = null
 # ==============================================================================
 
 func _ready() -> void:
+	modulate.a = 0.0
+	_tutorial_guide = TutorialGuideOverlay.new()
+	_tutorial_guide.z_index = 40
+	_tutorial_guide.visible = false
+	add_child(_tutorial_guide)
+
 	_setup_hud()
-	_cargar_nivel("res://data/levels/level_01.json")
+	if GameSession.mode == GameSession.Mode.PROCEDURAL:
+		_generar_nuevo_procedural()
+	else:
+		_cargar_nivel("res://data/levels/level_01.json")
+	_play_entry_transition()
+
+
+func _play_entry_transition() -> void:
+	# Entrada suave sobre el fondo continuo de BackdropManager
+	var target_pos := position
+	var board_sz := Vector2(level_data.width, level_data.height) * cell_size if level_data else Vector2(400, 400)
+	scale = Vector2(0.97, 0.97)
+	position = target_pos + board_sz * 0.015
+
+	var hud_nodes := _get_hud_fade_targets()
+	for n in hud_nodes:
+		n.modulate.a = 0.0
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(self, "modulate:a", 1.0, 0.24)
+	tw.tween_property(self, "scale", Vector2.ONE, 0.26).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(self, "position", target_pos, 0.26).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	for n in hud_nodes:
+		tw.tween_property(n, "modulate:a", 1.0, 0.24)
+
+
+func _get_hud_fade_targets() -> Array[Control]:
+	var targets: Array[Control] = []
+	for node_name: String in ["TopCenterHUD", "PauseButton", "BottomDock"]:
+		var n := $HUD.get_node_or_null(node_name) as Control
+		if n:
+			targets.append(n)
+	return targets
+
 
 func _setup_hud() -> void:
-	# Contenedor superior ajustado a pantalla completa
-	if has_node("HUD/HUDContainer"):
-		var hud_box := $HUD/HUDContainer as BoxContainer
-		if hud_box:
-			hud_box.set_anchors_preset(Control.PRESET_TOP_WIDE)
-			hud_box.offset_left = 32.0
-			hud_box.offset_top = 20.0
-			hud_box.offset_right = -32.0
-			hud_box.offset_bottom = 56.0
-			hud_box.add_theme_constant_override("separation", 12)
+	var hud_box := $HUD/HUDContainer as BoxContainer
+	if hud_box:
+		hud_box.visible = false
 
-	# Anclaje: Botones (izquierda), Pasos/Par (centro), Sector (derecha)
-	if has_node("HUD/HUDContainer/RestartButton") and has_node("HUD/HUDContainer/SectorLabel"):
-		var btn_r: Button = $HUD/HUDContainer/RestartButton
-		var btn_u: Button = $HUD/HUDContainer/UndoButton
-		var lbl: Label = $HUD/HUDContainer/SectorLabel
+	# 1. Cabecera centrada: Título del sector + Pills de Pasos y Racha
+	var top_center := VBoxContainer.new()
+	top_center.name = "TopCenterHUD"
+	top_center.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	top_center.offset_top = 12.0
+	top_center.offset_bottom = 84.0
+	top_center.alignment = BoxContainer.ALIGNMENT_CENTER
+	top_center.add_theme_constant_override("separation", 6)
+	top_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	$HUD.add_child(top_center)
 
-		# Indicador de movimientos y par óptimo
-		if not has_node("HUD/HUDContainer/MovesLabel"):
-			moves_label = Label.new()
-			moves_label.name = "MovesLabel"
-			moves_label.add_theme_font_size_override("font_size", 12)
-			moves_label.add_theme_color_override("font_color", Color(0.94, 0.82, 0.35))
-			moves_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			$HUD/HUDContainer.add_child(moves_label)
-		else:
-			moves_label = $HUD/HUDContainer/MovesLabel
+	var lbl_sector: Label = $HUD/HUDContainer/SectorLabel
+	$HUD/HUDContainer.remove_child(lbl_sector)
+	lbl_sector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl_sector.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_sector.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl_sector.add_theme_font_override("font", KromaTheme.bold_title_font())
+	lbl_sector.add_theme_font_size_override("font_size", 18)
+	lbl_sector.add_theme_color_override("font_color", Color(0.96, 0.97, 1.0))
+	lbl_sector.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.55))
+	lbl_sector.add_theme_constant_override("shadow_offset_y", 2)
+	top_center.add_child(lbl_sector)
 
-		$HUD/HUDContainer.move_child(btn_r, 0)
-		$HUD/HUDContainer.move_child(btn_u, 1)
-		$HUD/HUDContainer.move_child(moves_label, 2)
-		$HUD/HUDContainer.move_child(lbl, 3)
+	var pills_row := HBoxContainer.new()
+	pills_row.name = "PillsRow"
+	pills_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	pills_row.add_theme_constant_override("separation", 10)
+	top_center.add_child(pills_row)
 
-		btn_r.custom_minimum_size = Vector2(110, 32)
-		btn_u.custom_minimum_size = Vector2(110, 32)
+	moves_label = $HUD/HUDContainer/MovesLabel
+	$HUD/HUDContainer.remove_child(moves_label)
+	var moves_pill := PanelContainer.new()
+	moves_pill.add_theme_stylebox_override("panel", KromaTheme.glass_pill_style(Color(0.94, 0.82, 0.35, 0.35)))
+	moves_label.add_theme_font_size_override("font_size", 12)
+	moves_label.add_theme_color_override("font_color", Color(0.95, 0.84, 0.38))
+	moves_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	moves_pill.add_child(moves_label)
+	pills_row.add_child(moves_pill)
 
-		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		lbl.add_theme_font_size_override("font_size", 13)
-		lbl.add_theme_color_override("font_color", Color(0.75, 0.78, 0.84))
+	streak_pill = PanelContainer.new()
+	streak_pill.add_theme_stylebox_override("panel", KromaTheme.glass_pill_style(Color(0.35, 0.88, 0.98, 0.40)))
+	streak_label = Label.new()
+	streak_label.name = "StreakLabel"
+	streak_label.add_theme_font_size_override("font_size", 12)
+	streak_label.add_theme_color_override("font_color", Color(0.40, 0.90, 1.0))
+	streak_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	streak_pill.add_child(streak_label)
+	pills_row.add_child(streak_pill)
 
-	# Estilos de botones
-	var btn_style := obtener_estilo(EstiloTipo.BOTON_HUD)
-	for btn_path in ["HUD/HUDContainer/RestartButton", "HUD/HUDContainer/UndoButton"]:
-		if has_node(btn_path):
-			var b: Button = get_node(btn_path)
-			b.focus_mode = Control.FOCUS_NONE
-			b.add_theme_stylebox_override("normal", btn_style)
-			b.add_theme_stylebox_override("hover", btn_style)
-			b.add_theme_stylebox_override("pressed", btn_style)
-			b.add_theme_font_size_override("font_size", 11)
+	# Botón de Pausa arriba a la derecha
+	var btn_pause := KromaTheme.create_glass_button("||  PAUSA", Color(0.72, 0.78, 0.88), Vector2(108, 34), 11, false)
+	btn_pause.name = "PauseButton"
+	btn_pause.focus_mode = Control.FOCUS_NONE
+	btn_pause.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	btn_pause.offset_left = -132.0
+	btn_pause.offset_top = 16.0
+	btn_pause.offset_right = -24.0
+	btn_pause.offset_bottom = 50.0
+	btn_pause.pressed.connect(func():
+		if not is_moving:
+			_toggle_pause()
+	)
+	$HUD.add_child(btn_pause)
 
-	# Conexión de señales
-	if has_node("HUD/HUDContainer/RestartButton"):
-		var btn_r: Button = $HUD/HUDContainer/RestartButton
-		btn_r.text = "Reiniciar [R]"
-		if not btn_r.pressed.is_connected(_restart):
-			btn_r.pressed.connect(_restart)
+	# 2. Dock inferior táctil (ergonómico para teléfono y PC)
+	var bottom_dock := HBoxContainer.new()
+	bottom_dock.name = "BottomDock"
+	bottom_dock.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bottom_dock.offset_top = -60.0
+	bottom_dock.offset_bottom = -16.0
+	bottom_dock.alignment = BoxContainer.ALIGNMENT_CENTER
+	bottom_dock.add_theme_constant_override("separation", 12)
+	$HUD.add_child(bottom_dock)
 
-	if has_node("HUD/HUDContainer/UndoButton"):
-		var btn_u: Button = $HUD/HUDContainer/UndoButton
-		btn_u.text = "Deshacer [Z]"
-		if not btn_u.pressed.is_connected(_undo):
-			btn_u.pressed.connect(_undo)
+	var btn_u: Button = $HUD/HUDContainer/UndoButton
+	var btn_r: Button = $HUD/HUDContainer/RestartButton
+	$HUD/HUDContainer.remove_child(btn_u)
+	$HUD/HUDContainer.remove_child(btn_r)
 
-	if not has_node("HUD/TutorialPrompt"):
-			var prompt := Label.new()
-			prompt.name = "TutorialPrompt"
-			prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			prompt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			prompt.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-			prompt.offset_top = -54.0
-			prompt.offset_bottom = -20.0
-			prompt.add_theme_font_size_override("font_size", 12)
-			prompt.add_theme_color_override("font_color", Color(0.65, 0.70, 0.78, 0.70))
+	var btn_cycle := KromaTheme.create_glass_button("⇄  CAMBIAR", KromaTheme.COLOR_MAP["blue"], Vector2(138, 42), 11, false)
+	btn_cycle.name = "CycleButton"
+	btn_cycle.focus_mode = Control.FOCUS_NONE
+	btn_cycle.pressed.connect(_seleccionar_siguiente_bloque)
 
-			# Fondo sutil tipo cápsula translúcida
-			var prompt_bg := StyleBoxFlat.new()
-			prompt_bg.bg_color = Color(0.08, 0.10, 0.13, 0.60)
-			prompt_bg.set_corner_radius_all(6)
-			prompt_bg.border_width_left = 1
-			prompt_bg.border_width_top = 1
-			prompt_bg.border_width_right = 1
-			prompt_bg.border_width_bottom = 1
-			prompt_bg.border_color = Color(1.0, 1.0, 1.0, 0.08)
-			prompt_bg.content_margin_left = 16
-			prompt_bg.content_margin_right = 16
-			prompt.add_theme_stylebox_override("panel", prompt_bg)
+	btn_u.text = "↶  DESHACER"
+	_apply_dock_button_style(btn_u, KromaTheme.COLOR_MAP["yellow"])
+	if not btn_u.pressed.is_connected(_undo):
+		btn_u.pressed.connect(_undo)
 
-			var hud: Node = get_node_or_null("HUD")
-			if hud:
-				hud.add_child(prompt)
+	btn_r.text = "↺  REINICIAR"
+	_apply_dock_button_style(btn_r, KromaTheme.COLOR_MAP["red"])
+	if not btn_r.pressed.is_connected(_restart):
+		btn_r.pressed.connect(_restart)
 
-# ==============================================================================
-# ESTÉTICA Y GENERACIÓN DE ESTILOS
-# ==============================================================================
+	bottom_dock.add_child(btn_u)
+	bottom_dock.add_child(btn_cycle)
+	bottom_dock.add_child(btn_r)
 
-enum EstiloTipo { SLOT, BOTON_HUD, OUTER_FRAME, GLASS_BLOCK, GLASS_BLOCK_SELECTED, WALL, VOID, RECEPTOR }
+	# 3. Pill de Tutorial Interactivo encima del Dock
+	tutorial_wrap = CenterContainer.new()
+	tutorial_wrap.name = "TutorialWrap"
+	tutorial_wrap.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	tutorial_wrap.offset_top = -102.0
+	tutorial_wrap.offset_bottom = -68.0
+	tutorial_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_wrap.visible = false
+	$HUD.add_child(tutorial_wrap)
 
-func obtener_estilo(tipo: EstiloTipo, color_param: Color = Color.WHITE, corner_r: int = 7) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.set_corner_radius_all(corner_r)
+	tutorial_pill = PanelContainer.new()
+	tutorial_pill.add_theme_stylebox_override("panel", KromaTheme.glass_pill_style(Color(1.0, 1.0, 1.0, 0.24)))
+	tutorial_pill.mouse_filter = Control.MOUSE_FILTER_STOP
+	tutorial_wrap.add_child(tutorial_pill)
 
-	# Bordes activos por defecto
-	style.border_width_left = 1
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
+	var tut_hbox := HBoxContainer.new()
+	tut_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	tut_hbox.add_theme_constant_override("separation", 8)
+	tutorial_pill.add_child(tut_hbox)
 
-	match tipo:
-		EstiloTipo.SLOT:
-			style.bg_color = color_param
-			style.border_color = Color(1, 1, 1, 0.05)
+	tutorial_dot = Label.new()
+	tutorial_dot.text = "●"
+	tutorial_dot.add_theme_font_size_override("font_size", 10)
+	tutorial_dot.add_theme_color_override("font_color", Color(0.85, 0.86, 0.90))
+	tut_hbox.add_child(tutorial_dot)
 
-		EstiloTipo.BOTON_HUD:
-			style.set_corner_radius_all(6)
-			style.bg_color = Color(0.10, 0.12, 0.16, 0.85)
-			style.border_color = Color(1, 1, 1, 0.15)
-			style.content_margin_left = 10
-			style.content_margin_right = 10
-			style.content_margin_top = 5
-			style.content_margin_bottom = 5
+	tutorial_label = Label.new()
+	tutorial_label.add_theme_font_size_override("font_size", 11)
+	tutorial_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.96))
+	tut_hbox.add_child(tutorial_label)
 
-		EstiloTipo.OUTER_FRAME:
-			style.set_corner_radius_all(corner_r + 4)
-			style.bg_color = Color(0.06, 0.07, 0.09, 0.85)
-			style.border_color = Color(1.0, 1.0, 1.0, 0.14)
-			style.shadow_color = Color(0.0, 0.0, 0.0, 0.50)
-			style.shadow_size = 12
-			style.shadow_offset = Vector2(0, 4)
+	var btn_close_tut := Button.new()
+	btn_close_tut.text = "✕"
+	btn_close_tut.flat = true
+	btn_close_tut.focus_mode = Control.FOCUS_NONE
+	btn_close_tut.add_theme_font_size_override("font_size", 10)
+	btn_close_tut.add_theme_color_override("font_color", Color(0.60, 0.66, 0.76))
+	btn_close_tut.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0))
+	btn_close_tut.pressed.connect(func():
+		tutorial_done = true
+		var tw_c := create_tween()
+		tw_c.tween_property(tutorial_wrap, "modulate:a", 0.0, 0.18)
+		await tw_c.finished
+		if is_instance_valid(tutorial_wrap):
+			tutorial_wrap.visible = false
+	)
+	tut_hbox.add_child(btn_close_tut)
 
-		EstiloTipo.GLASS_BLOCK:
-			style.bg_color = Color(color_param.r * 0.85, color_param.g * 0.85, color_param.b * 0.85, 0.90)
-			style.border_color = Color(1.0, 1.0, 1.0, 0.35)
-			style.shadow_color = Color(0.0, 0.0, 0.0, 0.40)
-			style.shadow_size = 4
-			style.shadow_offset = Vector2(0, 2)
 
-		EstiloTipo.GLASS_BLOCK_SELECTED:
-			style.bg_color = Color(color_param.r * 0.85, color_param.g * 0.85, color_param.b * 0.85, 0.90)
-			style.border_color = Color(1.0, 1.0, 1.0, 0.90)
-			style.shadow_color = Color(color_param.r, color_param.g, color_param.b, 0.60)
-			style.shadow_size = 8
-			style.shadow_offset = Vector2(0, 2)
+func _apply_dock_button_style(btn: Button, accent: Color) -> void:
+	var styled := KromaTheme.create_glass_button(btn.text, accent, Vector2(138, 42), 11, false)
+	btn.custom_minimum_size = Vector2(138, 42)
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.add_theme_font_size_override("font_size", 11)
+	btn.add_theme_color_override("font_color", Color(0.92, 0.94, 0.98))
+	btn.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0))
+	for state_name: String in ["normal", "hover", "pressed"]:
+		btn.add_theme_stylebox_override(state_name, styled.get_theme_stylebox(state_name))
+	styled.queue_free()
 
-		EstiloTipo.WALL:
-			style.set_corner_radius_all(corner_r)
-			style.bg_color = COLOR_MAP["wall"]
-			style.border_color = Color(0.45, 0.48, 0.55, 0.80)
-			style.shadow_color = Color(0.0, 0.0, 0.0, 0.60)
-			style.shadow_size = 5
-			style.shadow_offset = Vector2(0, 3)
-
-		EstiloTipo.VOID:
-			var col_void: Color = COLOR_MAP["void"]
-			style.bg_color = col_void
-			style.border_color = Color(col_void.r * 1.5 + 0.1, col_void.g * 1.5 + 0.1, col_void.b * 1.5 + 0.1, 0.85)
-			style.shadow_color = Color(col_void.r, col_void.g, col_void.b, 0.35)
-			style.shadow_size = 6
-
-		EstiloTipo.RECEPTOR:
-			style.bg_color = Color(color_param.r, color_param.g, color_param.b, 0.15)
-			style.border_color = Color(color_param.r, color_param.g, color_param.b, 0.50)
-			style.shadow_color = Color(color_param.r, color_param.g, color_param.b, 0.20)
-			style.shadow_size = 6
-
-	return style
-
-func _crear_estilo_banner_victoria() -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = Color(0.08, 0.08, 0.10, 0.90)
-	s.corner_radius_top_left = 6
-	s.corner_radius_top_right = 6
-	s.corner_radius_bottom_left = 6
-	s.corner_radius_bottom_right = 6
-	s.border_width_left = 1
-	s.border_width_top = 1
-	s.border_width_right = 1
-	s.border_width_bottom = 1
-	s.border_color = Color(1.0, 1.0, 1.0, 0.14)
-	s.shadow_color = Color(0.0, 0.0, 0.0, 0.5)
-	s.shadow_size = 18
-	return s
-
-func _crear_estilo_footer_interno() -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	# Fondo oscuro traslúcido para legibilidad sin tapar el bisel exterior
-	s.bg_color = Color(0.04, 0.04, 0.06, 0.88)
-	# Mismos radios en las esquinas inferiores que el chasis exterior
-	s.corner_radius_bottom_left = 6
-	s.corner_radius_bottom_right = 6
-	s.corner_radius_top_left = 0
-	s.corner_radius_top_right = 0
-	# Borde superior sutil como línea divisoria con las celdas
-	s.border_width_top = 1
-	s.border_color = Color(1.0, 1.0, 1.0, 0.08)
-	return s
 
 # ==============================================================================
-# CONSTRUCCIÓN Y RENDERIZADO DEL TABLERO
+# CONSTRUCCIÓN DEL TABLERO
 # ==============================================================================
 
-# Greybox
 func _build_greybox() -> void:
-	var max_dim := maxi(level_data.width, level_data.height)
-	if max_dim > 5:
-		cell_size = 520.0 / float(max_dim)
-	else:
-		cell_size = BASE_CELL_SIZE
-
-	var board_pixel_width: float = level_data.width * cell_size
-	var board_pixel_height: float = level_data.height * cell_size
 	var vp_size := get_viewport_rect().size
 	if vp_size.x <= 0:
 		vp_size = Vector2(1152, 648)
 
-	# Centrado vertical
-	var hud_reserved_height: float = 76.0
-	var playable_height: float = vp_size.y - hud_reserved_height
+	var top_reserved := 94.0
+	var bottom_reserved := 108.0 if level_data.instruction.strip_edges() != "" else 76.0
+	var playable_height: float = vp_size.y - top_reserved - bottom_reserved
+	var max_board_px := minf(456.0, playable_height - 16.0)
 
-	position.x = floor((vp_size.x - board_pixel_width) * 0.5)
-	position.y = floor(hud_reserved_height + (playable_height - board_pixel_height) * 0.5)
-	
+	var max_dim := maxi(level_data.width, level_data.height)
+	cell_size = minf(BASE_CELL_SIZE, max_board_px / float(max_dim))
+
+	var board_w: float = level_data.width * cell_size
+	var board_h: float = level_data.height * cell_size
+	position.x = floor((vp_size.x - board_w) * 0.5)
+	position.y = floor(top_reserved + (playable_height - board_h) * 0.5)
+
 	var corner_rad := int(cell_size * 0.09)
-
-	# Marco exterior de fondo (por debajo)
 	var board_padding := 6.0
+
 	var outer_frame := Panel.new()
-	outer_frame.size = Vector2(board_pixel_width + board_padding * 2, board_pixel_height + board_padding * 2)
+	outer_frame.size = Vector2(board_w + board_padding * 2, board_h + board_padding * 2)
 	outer_frame.position = Vector2(-board_padding, -board_padding)
-	outer_frame.add_theme_stylebox_override("panel", obtener_estilo(EstiloTipo.OUTER_FRAME, Color.WHITE, corner_rad))
+	outer_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	outer_frame.add_theme_stylebox_override("panel", KromaTheme.cell_style(KromaTheme.CellStyle.OUTER_FRAME, Color.WHITE, corner_rad))
 	board_container.add_child(outer_frame)
 
-	# Celdas regulares
+	# Celdas vacías
 	for x in range(level_data.width):
 		for y in range(level_data.height):
 			var cell_pos := Vector2i(x, y)
 			if level_data.walls.has(cell_pos) or level_data.voids.has(cell_pos):
 				continue
-				
 			var cell := Panel.new()
 			cell.size = Vector2(cell_size - 4, cell_size - 4)
 			cell.position = Vector2(x * cell_size + 2, y * cell_size + 2)
-			cell.add_theme_stylebox_override("panel", obtener_estilo(EstiloTipo.SLOT, COLOR_MAP["empty"], corner_rad))
+			cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			cell.add_theme_stylebox_override("panel", KromaTheme.cell_style(KromaTheme.CellStyle.SLOT, KromaTheme.COLOR_MAP["empty"], corner_rad))
 			board_container.add_child(cell)
 
 	# Abismos
@@ -306,7 +310,8 @@ func _build_greybox() -> void:
 		var void_panel := Panel.new()
 		void_panel.size = Vector2(cell_size - 4, cell_size - 4)
 		void_panel.position = Vector2(v.x * cell_size + 2, v.y * cell_size + 2)
-		void_panel.add_theme_stylebox_override("panel", obtener_estilo(EstiloTipo.VOID, Color.WHITE, corner_rad))
+		void_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		void_panel.add_theme_stylebox_override("panel", KromaTheme.cell_style(KromaTheme.CellStyle.VOID, Color.WHITE, corner_rad))
 		board_container.add_child(void_panel)
 
 		var void_glyph := Label.new()
@@ -314,17 +319,32 @@ func _build_greybox() -> void:
 		void_glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		void_glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		void_glyph.size = void_panel.size
-		var c_glyph: Color = COLOR_MAP["void"]
-		void_glyph.add_theme_color_override("font_color", Color(c_glyph.r + 0.4, c_glyph.g + 0.4, c_glyph.b + 0.4, 0.70))
+		void_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		void_glyph.add_theme_color_override("font_color", Color(0.40, 0.40, 0.44, 0.70))
 		void_glyph.add_theme_font_size_override("font_size", int(cell_size * 0.30))
 		void_panel.add_child(void_glyph)
 
-	# Muros sólidos
+	# Muros unidos ortogonalmente (sin huecos ni saltos subpíxel)
+	var wall_set := {}
+	for w_pos in level_data.walls:
+		wall_set[w_pos] = true
+
 	for w in level_data.walls:
+		var has_up := wall_set.has(w + Vector2i.UP)
+		var has_down := wall_set.has(w + Vector2i.DOWN)
+		var has_left := wall_set.has(w + Vector2i.LEFT)
+		var has_right := wall_set.has(w + Vector2i.RIGHT)
+
+		var x0 := floorf(w.x * cell_size + (0.0 if has_left else 2.0))
+		var y0 := floorf(w.y * cell_size + (0.0 if has_up else 2.0))
+		var x1 := floorf((w.x + 1) * cell_size - (0.0 if has_right else 2.0))
+		var y1 := floorf((w.y + 1) * cell_size - (0.0 if has_down else 2.0))
+
 		var wall := Panel.new()
-		wall.size = Vector2(cell_size - 4, cell_size - 4)
-		wall.position = Vector2(w.x * cell_size + 2, w.y * cell_size + 2)
-		wall.add_theme_stylebox_override("panel", obtener_estilo(EstiloTipo.WALL, Color.WHITE, corner_rad - 1))
+		wall.position = Vector2(x0, y0)
+		wall.size = Vector2(x1 - x0, y1 - y0)
+		wall.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		wall.add_theme_stylebox_override("panel", KromaTheme.connected_wall_style(has_up, has_down, has_left, has_right, maxi(2, corner_rad - 1)))
 		board_container.add_child(wall)
 
 	# Receptores
@@ -333,9 +353,9 @@ func _build_greybox() -> void:
 		var rec := Panel.new()
 		rec.size = Vector2(cell_size - 12, cell_size - 12)
 		rec.position = Vector2(pos_v.x * cell_size + 6, pos_v.y * cell_size + 6)
-
-		var c: Color = COLOR_MAP.get(r["color"], Color.WHITE)
-		rec.add_theme_stylebox_override("panel", obtener_estilo(EstiloTipo.RECEPTOR, c, corner_rad))
+		rec.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var c: Color = KromaTheme.COLOR_MAP.get(r["color"], Color.WHITE)
+		rec.add_theme_stylebox_override("panel", KromaTheme.cell_style(KromaTheme.CellStyle.RECEPTOR, c, corner_rad))
 		receptors_container.add_child(rec)
 
 		var glyph := Glyph.new()
@@ -344,7 +364,6 @@ func _build_greybox() -> void:
 		glyph.setup(r["color"], (cell_size - 12) * 0.24)
 		rec.add_child(glyph)
 
-	# Bloques móviles iniciales
 	for b in level_data.blocks:
 		_instanciar_bloque_visual(b["id"], b["color"], b["pos"])
 
@@ -354,11 +373,10 @@ func _instanciar_bloque_visual(b_id: String, color_name: String, grid_pos: Vecto
 	blk.size = Vector2(cell_size - 8, cell_size - 8)
 	blk.position = Vector2(grid_pos.x * cell_size + 4, grid_pos.y * cell_size + 4)
 	blk.pivot_offset = blk.size / 2.0
-	
-	var corner_rad := int(cell_size * 0.09)
-	var col: Color = COLOR_MAP.get(color_name, Color.WHITE)
-	blk.add_theme_stylebox_override("panel", obtener_estilo(EstiloTipo.GLASS_BLOCK, col, corner_rad))
-	
+	blk.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var col: Color = KromaTheme.COLOR_MAP.get(color_name, Color.WHITE)
+	blk.add_theme_stylebox_override("panel", KromaTheme.cell_style(KromaTheme.CellStyle.GLASS_BLOCK, col, int(cell_size * 0.09)))
 	blocks_container.add_child(blk)
 	block_nodes[b_id] = blk
 
@@ -370,14 +388,19 @@ func _instanciar_bloque_visual(b_id: String, color_name: String, grid_pos: Vecto
 
 
 # ==============================================================================
-# LÓGICA DE CONTROL Y MOVIMIENTO
+# ENTRADA (TECLADO + TÁCTIL SWIPE / TAP)
 # ==============================================================================
 
 func _unhandled_input(event: InputEvent) -> void:
-	if is_moving:
+	if event.is_action_pressed("ui_cancel"):
+		if not is_moving:
+			_toggle_pause()
+		get_viewport().set_input_as_handled()
 		return
 
-	# Reversión y reinicio siempre disponibles (incluso en estado de derrota)
+	if is_paused or is_moving:
+		return
+
 	if event.is_action_pressed("undo_move") or (event is InputEventKey and event.pressed and event.keycode == KEY_Z):
 		_undo()
 		return
@@ -385,17 +408,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		_restart()
 		return
 
-	# Si la simulación está bloqueada por derrota, impedir nuevos movimientos
 	if is_defeated:
 		return
 
-	# Alternar bloque activo
 	if event is InputEventKey and event.pressed and not event.is_echo():
 		if event.keycode == KEY_SPACE or event.keycode == KEY_TAB:
 			_seleccionar_siguiente_bloque()
 			return
 
-	# Direccionales
 	if event.is_action_pressed("ui_up") or event.is_action_pressed("move_up"):
 		_execute_move(Vector2i.UP)
 	elif event.is_action_pressed("ui_down") or event.is_action_pressed("move_down"):
@@ -405,140 +425,183 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("ui_right") or event.is_action_pressed("move_right"):
 		_execute_move(Vector2i.RIGHT)
 
+	_handle_pointer_input(event)
+
+
+func _handle_pointer_input(event: InputEvent) -> void:
+	var is_press: bool = (event is InputEventScreenTouch and event.pressed) or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed)
+	var is_release: bool = (event is InputEventScreenTouch and not event.pressed) or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed)
+	var is_drag: bool = (event is InputEventScreenDrag) or (event is InputEventMouseMotion)
+
+	if is_press:
+		_touch_start_pos = event.position
+		_is_touch_active = true
+		_swipe_triggered = false
+	elif is_release:
+		if _is_touch_active and not _swipe_triggered:
+			_try_select_block_at(event.position)
+		_is_touch_active = false
+	elif is_drag and _is_touch_active and not _swipe_triggered:
+		_check_swipe_delta(event.position - _touch_start_pos)
+
+
+func _check_swipe_delta(delta: Vector2) -> void:
+	if delta.length() < SWIPE_THRESHOLD:
+		return
+	_swipe_triggered = true
+	_is_touch_active = false
+	var dir: Vector2i
+	if absf(delta.x) > absf(delta.y):
+		dir = Vector2i.RIGHT if delta.x > 0.0 else Vector2i.LEFT
+	else:
+		dir = Vector2i.DOWN if delta.y > 0.0 else Vector2i.UP
+	_execute_move(dir)
+
+
+func _try_select_block_at(screen_pos: Vector2) -> void:
+	if board == null or cell_size <= 0.0:
+		return
+	var local_pos: Vector2 = blocks_container.get_global_transform().affine_inverse() * screen_pos
+	var cell := Vector2i(int(floor(local_pos.x / cell_size)), int(floor(local_pos.y / cell_size)))
+	var snap_blocks: Dictionary = board.snapshot()["blocks"]
+	for b_id: String in board.active_block_ids():
+		if snap_blocks[b_id]["pos"] == cell:
+			if bloque_seleccionado != b_id:
+				bloque_seleccionado = b_id
+				_actualizar_seleccion_visual()
+				AudioManager.play("snap", 1.25, -10.0)
+				if level_data and level_data.id == 2:
+					_complete_tutorial_step("✓ ¡Bloque alternado! Ahora úsalo de freno")
+				_refresh_tutorial_guide()
+			return
+
 
 func _seleccionar_siguiente_bloque() -> void:
 	var bloques := board.active_block_ids()
 	if bloques.is_empty():
 		return
 	var indice := bloques.find(bloque_seleccionado)
-	if indice == -1:
-		bloque_seleccionado = bloques[0]
-	else:
-		bloque_seleccionado = bloques[(indice + 1) % bloques.size()]
+	bloque_seleccionado = bloques[0] if indice == -1 else bloques[(indice + 1) % bloques.size()]
 	_actualizar_seleccion_visual()
+	if level_data and level_data.id == 2:
+		_complete_tutorial_step("✓ ¡Bloque alternado! Ahora úsalo de freno")
+	_refresh_tutorial_guide()
 
+
+# ==============================================================================
+# MOVIMIENTO, SINCRONIZACIÓN Y TURNOS
+# ==============================================================================
 
 func _execute_move(dir: Vector2i) -> void:
-	if not board.active_block_ids().has(bloque_seleccionado):
-		_seleccionar_siguiente_bloque()
-		if bloque_seleccionado.is_empty():
-			return
-
-	if not block_nodes.has(bloque_seleccionado):
+	if bloque_seleccionado == "" or not block_nodes.has(bloque_seleccionado):
 		return
 
-	var snap := {
-		"board": board.snapshot(),
-		"block_id": bloque_seleccionado
-	}
-
+	var snap := {"board": board.snapshot(), "block_id": bloque_seleccionado}
+	var blocks_before := board.active_block_ids().size()
 	var path: Array = []
 	var result = board.apply_move(bloque_seleccionado, dir, path)
 
-	# 1. Sin movimiento: micro-bump elástico al topar
-	if path.size() > 0:
-		history_stack.push_back(snap)
-		current_moves += 1
-		_actualizar_hud_movimientos()
-		is_moving = true
-		
-		# Sonido de deslizamiento
-		AudioManager.play("slide", 1.0, -6.0)
+	if path.is_empty():
+		var moving_blk: Panel = block_nodes[bloque_seleccionado]
+		AudioManager.play("bump", 0.85, -14.0, 0.05)
+		var pos_origen := moving_blk.position
+		var tw_bump := create_tween()
+		tw_bump.tween_property(moving_blk, "position", pos_origen + Vector2(dir) * 3.0, 0.03).set_trans(Tween.TRANS_QUAD)
+		tw_bump.tween_property(moving_blk, "position", pos_origen, 0.04).set_trans(Tween.TRANS_SINE)
+		return
 
-		var moving_id := bloque_seleccionado
-		var moving_blk: Panel = block_nodes[moving_id]
-		var target_pos := Vector2(path[-1].x * cell_size + 4, path[-1].y * cell_size + 4)
+	history_stack.push_back(snap)
+	current_moves += 1
+	if par_moves > 0 and current_moves > par_moves and run_is_perfect:
+		run_is_perfect = false
+		GameSession.reset_streak()
+	_actualizar_hud_movimientos()
 
-		var move_duration := clampf(0.05 + float(path.size()) * 0.03, 0.07, 0.22)
-		var tw := create_tween()
+	is_moving = true
+	var moving_id := bloque_seleccionado
 
-		tw.tween_property(moving_blk, "position", target_pos, move_duration).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-
-		# Impacto / sincronización
-		tw.tween_callback(func():
-			_sincronizar_bloques_completos()
-			if result == BoardState.MoveResult.FELL:
-				AudioManager.play("void", 0.90, -2.0, 0.08)
-			elif result == BoardState.MoveResult.SNAPPED:
-				AudioManager.play("snap", 1.0, 8, 0.8)
-			elif result == BoardState.MoveResult.OK:
-				AudioManager.play("bump", 0.9, -12.0, 0.06)
-			elif result == BoardState.MoveResult.VICTORY:
-				var id_sonido := randi_range(1, 3) # Aleatorio entre 3 sonidos
-				# AudioManager.play("victory_%d" % id_sonido, randf_range(0.95, 1.05), 0.0, 2.6, 0.8)
-				AudioManager.play("victory_2", randf_range(0.6, 0.8), 0.0, 2.6, 0.8)
-				print("Resultado del movimiento: ", result)
-				_mostrar_notificacion_victoria(func():
-					is_moving = false
-					var siguiente_id: int = int(level_data.id) + 1
-					var siguiente_ruta: String = "res://data/levels/level_%02d.json" % siguiente_id
-
-					if siguiente_id <= 4 and FileAccess.file_exists(siguiente_ruta):
-						_cargar_nivel(siguiente_ruta)
-					else:
-						_generar_nuevo_procedural()
-				)
-		)
-
-		# Reacción visual según el resultado
-		if result == BoardState.MoveResult.FELL:
-			tw.tween_property(moving_blk, "scale", Vector2.ZERO, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	# Actualizar progreso de guía visual y texto interactivo
+	if _tutorial_step_idx < _tutorial_solution.size():
+		var expected: Dictionary = _tutorial_solution[_tutorial_step_idx]
+		if moving_id == expected["block"] and dir == LevelSolver.dir_from_name(expected["dir"]):
+			_tutorial_step_idx += 1
 		else:
-			# Freno elástico sutil o pulso de absorción
-			var squash := Vector2(0.95, 1.05) if dir.x != 0 else Vector2(1.05, 0.95)
-			tw.tween_property(moving_blk, "scale", squash, 0.03)
-			tw.tween_property(moving_blk, "scale", Vector2.ONE, 0.04).set_trans(Tween.TRANS_SINE)
+			_tutorial_step_idx = 999
+	if _tutorial_guide:
+		_tutorial_guide.visible = false
 
-		# Liberación del turno
-		tw.finished.connect(func():
-			if result != BoardState.MoveResult.VICTORY:
-				is_moving = false
-				_sincronizar_bloques_completos()
-				if board.is_defeated():
-					_mostrar_notificacion_derrota()
-		)
+	if level_data:
+		if level_data.id == 1:
+			_complete_tutorial_step("✓ ¡Bien! Los bloques avanzan hasta chocar")
+		elif level_data.id == 3 and result == BoardState.MoveResult.OK and board.active_block_ids().size() < blocks_before:
+			_complete_tutorial_step("✓ ¡Síntesis cromática completada!")
+		elif level_data.id == 4 and current_moves >= 2 and result != BoardState.MoveResult.FELL:
+			_complete_tutorial_step("✓ ¡Controlado! Lleva la pieza a la meta")
 
+	AudioManager.play("slide", 1.0, -6.0)
+	var moving_blk: Panel = block_nodes[moving_id]
+	var target_pos := Vector2(path[-1].x * cell_size + 4, path[-1].y * cell_size + 4)
+	var move_duration := clampf(0.05 + float(path.size()) * 0.03, 0.07, 0.22)
+
+	var tw := create_tween()
+	tw.tween_property(moving_blk, "position", target_pos, move_duration).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+	tw.tween_callback(func():
+		_sincronizar_bloques_completos()
+		if result == BoardState.MoveResult.FELL:
+			run_is_perfect = false
+			GameSession.reset_streak()
+			_actualizar_hud_movimientos()
+			AudioManager.play("void", 0.90, -2.0, 0.08)
+		elif result == BoardState.MoveResult.SNAPPED:
+			AudioManager.play("snap", 1.0, 8, 0.8)
+		elif result == BoardState.MoveResult.OK:
+			AudioManager.play("bump", 0.9, -12.0, 0.06)
+		elif result == BoardState.MoveResult.VICTORY:
+			AudioManager.play("victory_2", randf_range(0.6, 0.8), 0.0, 2.6, 0.8)
+			_on_level_victory()
+	)
+
+	if result == BoardState.MoveResult.FELL:
+		tw.tween_property(moving_blk, "scale", Vector2.ZERO, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	else:
-			# Ya está contra el muro
-			var moving_blk: Panel = block_nodes[bloque_seleccionado]
-			AudioManager.play("bump", 0.85, -14.0, 0.05)
+		var squash := Vector2(0.95, 1.05) if dir.x != 0 else Vector2(1.05, 0.95)
+		tw.tween_property(moving_blk, "scale", squash, 0.03)
+		tw.tween_property(moving_blk, "scale", Vector2.ONE, 0.04).set_trans(Tween.TRANS_SINE)
 
-			# Micro-choque
-			var offset_bump := Vector2(dir.x, dir.y) * 3.0
-			var pos_origen := moving_blk.position
+	tw.finished.connect(func():
+		if result != BoardState.MoveResult.VICTORY:
+			is_moving = false
+			_sincronizar_bloques_completos()
+			if board.is_defeated():
+				_mostrar_derrota()
+			else:
+				_refresh_tutorial_guide()
+	)
 
-			var tw_bump := create_tween()
-			tw_bump.tween_property(moving_blk, "position", pos_origen + offset_bump, 0.03).set_trans(Tween.TRANS_QUAD)
-			tw_bump.tween_property(moving_blk, "position", pos_origen, 0.04).set_trans(Tween.TRANS_SINE)
 
 func _sincronizar_bloques_completos() -> void:
 	var corner_rad := int(cell_size * 0.09)
-
 	for id in block_nodes.keys():
 		var info: Dictionary = board.block_info(id)
 		var blk: Panel = block_nodes[id]
 
-		# Bloque absorbido por fusión o caído en abismo
 		if info.is_empty():
 			blk.visible = false
 			continue
 
 		blk.visible = true
-		var col: Color = COLOR_MAP.get(info["color"], Color.WHITE)
-		var es_locked: bool = info.get("locked", false)
-		var estilo := obtener_estilo(EstiloTipo.GLASS_BLOCK, col, corner_rad)
-
-		if es_locked:
+		var col: Color = KromaTheme.COLOR_MAP.get(info["color"], Color.WHITE)
+		var estilo := KromaTheme.cell_style(KromaTheme.CellStyle.GLASS_BLOCK, col, corner_rad)
+		if info.get("locked", false):
 			estilo.shadow_size = 0
 			estilo.border_color = Color(1.0, 1.0, 1.0, 0.15)
 			blk.z_index = 1
 		blk.add_theme_stylebox_override("panel", estilo)
 
-		# Solo sincronizar la posición si no está en pleno tween activo
 		if not is_moving or id != bloque_seleccionado:
 			blk.position = Vector2(info["pos"].x * cell_size + 4, info["pos"].y * cell_size + 4)
 
-		# Si el glifo cambió de color (hubo fusión), provocar un golpe de escala sutil (pop)
 		if blk.has_node("Glyph"):
 			var g: Glyph = blk.get_node("Glyph")
 			if g.color_name != info["color"]:
@@ -548,30 +611,31 @@ func _sincronizar_bloques_completos() -> void:
 				pop.tween_property(blk, "scale", Vector2.ONE, 0.05).set_trans(Tween.TRANS_SINE)
 			g.setup(info["color"], (cell_size - 8) * 0.25)
 
-		_actualizar_glifo(blk, info["color"])
-
-	# Actualizar puntero al bloque activo
 	var activos := board.active_block_ids()
 	if not activos.has(bloque_seleccionado):
 		bloque_seleccionado = activos[0] if not activos.is_empty() else ""
-
 	_actualizar_seleccion_visual()
 
 
-func _actualizar_glifo(blk: Panel, color_name: String) -> void:
-	if blk.has_node("Glyph"):
-		var g: Glyph = blk.get_node("Glyph")
-		g.setup(color_name, (cell_size - 8) * 0.25)
+func _actualizar_seleccion_visual() -> void:
+	var corner_rad := int(cell_size * 0.09)
+	for id in block_nodes.keys():
+		var info: Dictionary = board.block_info(id)
+		if info.is_empty() or info.get("locked", false):
+			continue
+		var blk: Panel = block_nodes[id]
+		var col: Color = KromaTheme.COLOR_MAP.get(info["color"], Color.WHITE)
+		var style_type := KromaTheme.CellStyle.GLASS_BLOCK_SELECTED if id == bloque_seleccionado else KromaTheme.CellStyle.GLASS_BLOCK
+		blk.add_theme_stylebox_override("panel", KromaTheme.cell_style(style_type, col, corner_rad))
+		blk.z_index = 10 if id == bloque_seleccionado else 2
 
-
-# ==============================================================================
-# GESTIÓN DE TURNOS Y DESHACER
-# ==============================================================================
 
 func _undo() -> void:
-	if history_stack.is_empty() or is_moving:
+	if history_stack.is_empty() or is_moving or is_paused:
 		return
-	_cerrar_notificacion_derrota()
+	_cerrar_derrota()
+	run_is_perfect = false
+	GameSession.reset_streak()
 	AudioManager.play("undo", 1.0, -3.0, 0.08)
 
 	var prev_record: Dictionary = history_stack.pop_back()
@@ -580,12 +644,16 @@ func _undo() -> void:
 	current_moves = maxi(0, current_moves - 1)
 	_actualizar_hud_movimientos()
 	_sincronizar_bloques_completos()
+	_tutorial_step_idx = 999
+	_refresh_tutorial_guide()
 
 
 func _restart() -> void:
-	if is_moving:
+	if is_moving or is_paused:
 		return
-	_cerrar_notificacion_derrota()
+	_cerrar_derrota()
+	run_is_perfect = false
+	GameSession.reset_streak()
 	AudioManager.play("undo", 0.85, -2.0, 0.08)
 	board.restore(initial_snapshot)
 	history_stack.clear()
@@ -595,247 +663,125 @@ func _restart() -> void:
 	if not level_data.blocks.is_empty():
 		bloque_seleccionado = level_data.blocks[0]["id"]
 	_sincronizar_bloques_completos()
+	_tutorial_step_idx = 0
+	_refresh_tutorial_guide()
 
 
 # ==============================================================================
-# FEEDBACK VISUAL Y NOTIFICACIONES
+# OVERLAYS (VICTORIA, DERROTA, PAUSA) Y HUD
 # ==============================================================================
 
-func _actualizar_seleccion_visual() -> void:
-	var corner_rad := int(cell_size * 0.09)
-	for id in block_nodes:
-		var blk: Panel = block_nodes[id]
-		var info: Dictionary = board.block_info(id)
-		if info.is_empty():
-			continue
-		var col: Color = COLOR_MAP.get(info["color"], Color.WHITE)
-		var st := obtener_estilo(EstiloTipo.GLASS_BLOCK, col, corner_rad)
+func _on_level_victory() -> void:
+	var nivel_perfecto := run_is_perfect and (par_moves <= 0 or current_moves <= par_moves)
+	GameSession.register_level_clear(nivel_perfecto)
+	_actualizar_hud_movimientos()
 
-		if id == bloque_seleccionado:
-			blk.z_index = 10
-			blk.scale = Vector2(1.08, 1.08)
-			st.border_width_left = 1
-			st.border_width_top = 1
-			st.border_width_right = 1
-			st.border_width_bottom = 1
-			st.border_color = Color(1.0, 1.0, 1.0, 0.90)
-			st.shadow_color = Color(col.r, col.g, col.b, 0.60)
-			st.shadow_size = 8
-			st.shadow_offset = Vector2(0, 2)
-		else:
-			blk.z_index = 2
-			blk.scale = Vector2.ONE
-			st.shadow_color = Color(0, 0, 0, 0.35)
-			st.shadow_size = 4
-			st.shadow_offset = Vector2(0, 2)
-
-		blk.add_theme_stylebox_override("panel", st)
-
-		blk.add_theme_stylebox_override("panel", st)
-
-func _mostrar_notificacion_victoria(on_complete: Callable) -> void:
-	# 1. Crear CanvasLayer en la raíz absoluta de la ventana
-	var canvas := CanvasLayer.new()
-	canvas.layer = 128
-	get_tree().root.add_child(canvas)
-
-	# 2. Fondo oscuro
-	var backdrop := ColorRect.new()
-	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.color = Color(0.04, 0.04, 0.06, 0.75)
-	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
-	canvas.add_child(backdrop)
-
-	# 3. Tarjeta central
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(360, 96)
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	panel.add_theme_stylebox_override("panel", _crear_estilo_banner_victoria())
-	canvas.add_child(panel)
-
-	var vbox := VBoxContainer.new()
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	panel.add_child(vbox)
-
-	var lbl_sub := Label.new()
-	lbl_sub.text = "ESTADO DEL SISTEMA // RESUELTO"
-	lbl_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl_sub.add_theme_font_size_override("font_size", 10)
-	lbl_sub.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.40))
-	vbox.add_child(lbl_sub)
-
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 4)
-	vbox.add_child(spacer)
-
-	var lbl_main := Label.new()
-	lbl_main.text = "SECTOR COMPLETADO"
-	lbl_main.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl_main.add_theme_font_size_override("font_size", 17)
-	lbl_main.add_theme_color_override("font_color", Color(0.96, 0.96, 0.98, 1.0))
-	vbox.add_child(lbl_main)
-
-	if par_moves > 0:
-		var spacer_eval := Control.new()
-		spacer_eval.custom_minimum_size = Vector2(0, 4)
-		vbox.add_child(spacer_eval)
-
-		var lbl_eval := Label.new()
-		lbl_eval.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl_eval.add_theme_font_size_override("font_size", 11)
-		if current_moves <= par_moves:
-			lbl_eval.text = "★★★ RANGO S // ÓPTIMO (%d/%d PASOS)" % [current_moves, par_moves]
-			lbl_eval.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
-		elif current_moves <= par_moves + 3:
-			lbl_eval.text = "★★☆ RANGO A // EFICIENTE (%d/%d PASOS)" % [current_moves, par_moves]
-			lbl_eval.add_theme_color_override("font_color", Color(0.4, 0.9, 0.6))
-		else:
-			lbl_eval.text = "★☆☆ RANGO B // COMPLETADO (%d/%d PASOS)" % [current_moves, par_moves]
-			lbl_eval.add_theme_color_override("font_color", Color(0.75, 0.78, 0.85))
-		vbox.add_child(lbl_eval)
-
-	# 4. Control de opacidad directo sobre el CanvasLayer entero
-	# Inicia completamente invisible
-	backdrop.modulate.a = 0.0
-	panel.modulate.a = 0.0
-
-	# ── SECUENCIA CRONOLÓGICA CON AWAIT (Sin conflictos de Tweens encadenados) ──
-	# A. Fade in limpio (0.25s)
-	var tw_in := canvas.create_tween()
-	tw_in.set_parallel(true)
-	tw_in.tween_property(backdrop, "modulate:a", 1.0, 0.25)
-	tw_in.tween_property(panel, "modulate:a", 1.0, 0.25)
-	await tw_in.finished
-
-	# B. Tiempo garantizado de lectura (2.0 segundos reales sin tocar nada)
-	await get_tree().create_timer(2.0).timeout
-
-	# C. Fade out suave (0.35s)
-	if is_instance_valid(canvas):
-		var tw_out := canvas.create_tween()
-		tw_out.set_parallel(true)
-		tw_out.tween_property(backdrop, "modulate:a", 0.0, 0.35)
-		tw_out.tween_property(panel, "modulate:a", 0.0, 0.35)
-		await tw_out.finished
-
-		# D. Destrucción del cartel y cambio de nivel
-		canvas.queue_free()
-		if on_complete.is_valid():
-			on_complete.call()
+	GameplayOverlays.show_victory(
+		get_tree(),
+		current_moves,
+		par_moves,
+		GameSession.perfect_streak,
+		GameSession.best_streak,
+		nivel_perfecto,
+		func():
+			is_moving = false
+			var siguiente_id: int = int(level_data.id) + 1
+			var siguiente_ruta := "res://data/levels/level_%02d.json" % siguiente_id
+			if siguiente_id <= 4 and FileAccess.file_exists(siguiente_ruta):
+				_cargar_nivel(siguiente_ruta)
+			else:
+				_generar_nuevo_procedural()
+	)
 
 
-func _mostrar_notificacion_derrota() -> void:
+func _mostrar_derrota() -> void:
 	if is_defeated or defeat_canvas != null:
 		return
 	is_defeated = true
-
-	# Sonido disonante de vacío / fallo
 	AudioManager.play("void", 0.70, 2.0, 0.1)
-
-	defeat_canvas = CanvasLayer.new()
-	defeat_canvas.layer = 127
-	get_tree().root.add_child(defeat_canvas)
-
-	# Fondo oscuro traslúcido
-	var backdrop := ColorRect.new()
-	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.color = Color(0.08, 0.02, 0.03, 0.75)
-	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
-	defeat_canvas.add_child(backdrop)
-
-	# Panel central con reborde carmesí
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(400, 110)
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-
-	var s_derrota := StyleBoxFlat.new()
-	s_derrota.bg_color = Color(0.10, 0.04, 0.05, 0.95)
-	s_derrota.set_corner_radius_all(6)
-	s_derrota.border_width_left = 1
-	s_derrota.border_width_top = 1
-	s_derrota.border_width_right = 1
-	s_derrota.border_width_bottom = 1
-	s_derrota.border_color = Color(0.95, 0.22, 0.25, 0.70)
-	s_derrota.shadow_color = Color(0.0, 0.0, 0.0, 0.6)
-	s_derrota.shadow_size = 20
-	panel.add_theme_stylebox_override("panel", s_derrota)
-	defeat_canvas.add_child(panel)
-
-	var vbox := VBoxContainer.new()
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	panel.add_child(vbox)
-
-	var lbl_sub := Label.new()
-	lbl_sub.text = "ESTADO DEL SISTEMA // IRRESOLUBLE"
-	lbl_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl_sub.add_theme_font_size_override("font_size", 10)
-	lbl_sub.add_theme_color_override("font_color", Color(0.95, 0.35, 0.35, 0.85))
-	vbox.add_child(lbl_sub)
-
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 4)
-	vbox.add_child(spacer)
-
-	var lbl_main := Label.new()
-	lbl_main.text = "SIMULACIÓN BLOQUEADA"
-	lbl_main.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl_main.add_theme_font_size_override("font_size", 17)
-	lbl_main.add_theme_color_override("font_color", Color(0.98, 0.95, 0.95, 1.0))
-	vbox.add_child(lbl_main)
-
-	var spacer2 := Control.new()
-	spacer2.custom_minimum_size = Vector2(0, 6)
-	vbox.add_child(spacer2)
-
-	var lbl_help := Label.new()
-	lbl_help.text = "PULSA [Z] PARA DESHACER  //  [R] PARA REINICIAR"
-	lbl_help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl_help.add_theme_font_size_override("font_size", 11)
-	lbl_help.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.60))
-	vbox.add_child(lbl_help)
-
-	# Fade in
-	backdrop.modulate.a = 0.0
-	panel.modulate.a = 0.0
-	var tw := defeat_canvas.create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(backdrop, "modulate:a", 1.0, 0.2)
-	tw.tween_property(panel, "modulate:a", 1.0, 0.2)
+	defeat_canvas = GameplayOverlays.show_defeat(get_tree(), _undo, _restart)
 
 
-func _cerrar_notificacion_derrota() -> void:
+func _cerrar_derrota() -> void:
 	is_defeated = false
 	if defeat_canvas != null and is_instance_valid(defeat_canvas):
 		defeat_canvas.queue_free()
 		defeat_canvas = null
 
 
+func _toggle_pause() -> void:
+	if is_paused:
+		_cerrar_pausa()
+	else:
+		_mostrar_pausa()
+
+
+func _mostrar_pausa() -> void:
+	if is_paused or pause_canvas != null:
+		return
+	is_paused = true
+	AudioManager.play("snap", 0.95, -6.0)
+
+	var ctx := ""
+	if GameSession.mode == GameSession.Mode.PROCEDURAL:
+		var info := GameSession.get_difficulty_info()
+		ctx = "SIMULACIÓN %02d  ·  %s (%s)" % [procedural_run_count, info["label"], info["grid"]]
+	else:
+		ctx = "SECTOR %02d  ·  %s" % [level_data.sector, level_data.level_name]
+
+	pause_canvas = GameplayOverlays.show_pause(
+		get_tree(),
+		ctx,
+		func():
+			AudioManager.play("snap", 1.1, -6.0)
+			_cerrar_pausa(),
+		func():
+			_cerrar_pausa()
+			_restart(),
+		func():
+			AudioManager.play("undo", 0.9, -4.0)
+			_cerrar_pausa()
+			_cerrar_derrota()
+			var tw_exit := create_tween()
+			tw_exit.set_parallel(true)
+			tw_exit.tween_property(self, "modulate:a", 0.0, 0.18)
+			for n in _get_hud_fade_targets():
+				tw_exit.tween_property(n, "modulate:a", 0.0, 0.18)
+			await tw_exit.finished
+			get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+	)
+
+
+func _cerrar_pausa() -> void:
+	is_paused = false
+	if pause_canvas != null and is_instance_valid(pause_canvas):
+		pause_canvas.queue_free()
+		pause_canvas = null
+
+
 func _actualizar_hud_movimientos() -> void:
-	if moves_label == null and has_node("HUD/HUDContainer/MovesLabel"):
-		moves_label = $HUD/HUDContainer/MovesLabel
 	if moves_label:
-		if par_moves > 0:
-			moves_label.text = "PASOS: %02d // PAR: %02d" % [current_moves, par_moves]
+		moves_label.text = ("PASOS %02d / PAR %02d" % [current_moves, par_moves]) if par_moves > 0 else ("PASOS %02d" % current_moves)
+
+	if streak_label:
+		if run_is_perfect:
+			streak_label.text = "✦ RACHA %02d" % GameSession.perfect_streak
+			streak_label.add_theme_color_override("font_color", Color(0.40, 0.90, 1.0))
+			if streak_pill:
+				streak_pill.add_theme_stylebox_override("panel", KromaTheme.glass_pill_style(Color(0.35, 0.88, 0.98, 0.45)))
 		else:
-			moves_label.text = "PASOS: %02d" % current_moves
+			streak_label.text = "RACHA --"
+			streak_label.add_theme_color_override("font_color", Color(0.55, 0.58, 0.65, 0.75))
+			if streak_pill:
+				streak_pill.add_theme_stylebox_override("panel", KromaTheme.glass_pill_style(Color(1.0, 1.0, 1.0, 0.12)))
 
 
 # ==============================================================================
-# CARGA Y GENERACIÓN PROCEDURAL
+# CARGA, GENERACIÓN PROCEDURAL Y TUTORIAL
 # ==============================================================================
 
 func _cargar_nivel(origen: Variant) -> void:
-	var nuevo_nivel: LevelData = null
-
-	if origen is String:
-		nuevo_nivel = LevelLoader.load_from_file(origen)
-	elif origen is LevelData:
-		nuevo_nivel = origen
-
+	var nuevo_nivel: LevelData = LevelLoader.load_from_file(origen) if origen is String else origen
 	if nuevo_nivel == null or not nuevo_nivel.is_valid():
 		push_error("No se pudo cargar el nivel.")
 		return
@@ -848,89 +794,125 @@ func _cargar_nivel(origen: Variant) -> void:
 	history_stack.clear()
 	is_moving = false
 	is_defeated = false
+	is_paused = false
+	run_is_perfect = true
 	current_moves = 0
-	_cerrar_notificacion_derrota()
+	_cerrar_derrota()
+	_cerrar_pausa()
 
-	# Calcular par óptimo mediante LevelSolver
 	var sol: Dictionary = LevelSolver.solve(level_data, 50000)
 	if sol.get("solved", false):
 		par_moves = sol["moves"].size()
+		_tutorial_solution = sol["moves"]
 	else:
 		par_moves = 0
+		_tutorial_solution = []
+	_tutorial_step_idx = 0
 	_actualizar_hud_movimientos()
 
-	# Limpiar capas visuales anteriores
 	for contenedor in [board_container, receptors_container, blocks_container]:
 		for hijo in contenedor.get_children():
 			contenedor.remove_child(hijo)
 			hijo.queue_free()
 
 	block_nodes.clear()
-	if not level_data.blocks.is_empty():
-		bloque_seleccionado = level_data.blocks[0]["id"]
-	else:
-		bloque_seleccionado = ""
+	bloque_seleccionado = level_data.blocks[0]["id"] if not level_data.blocks.is_empty() else ""
 
 	_build_greybox()
 	_actualizar_seleccion_visual()
 	_actualizar_mensaje_tutorial()
+	_refresh_tutorial_guide()
 
-	if has_node("HUD/HUDContainer/SectorLabel"):
+	var sector_lbl := get_node_or_null("HUD/TopCenterHUD/SectorLabel") as Label
+	if sector_lbl:
 		if level_data.id == 99:
-			$HUD/HUDContainer/SectorLabel.text = "SECTOR ∞ — %s" % level_data.level_name
+			var info := GameSession.get_difficulty_info()
+			sector_lbl.text = "%s  ·  %s" % [level_data.level_name, info["label"]]
 		else:
-			$HUD/HUDContainer/SectorLabel.text = "SECTOR %02d — %s" % [level_data.sector, level_data.level_name]
+			sector_lbl.text = "SECTOR %02d  ·  %s" % [level_data.sector, level_data.level_name]
 
-func _actualizar_mensaje_tutorial() -> void:
-	if not has_node("HUD/TutorialPrompt"):
-		return
-		
-	var prompt: Label = $HUD/TutorialPrompt
-	var mensaje: String = level_data.instruction.strip_edges()
+	if not level_data.receptors.is_empty():
+		var target_col: Color = KromaTheme.COLOR_MAP.get(level_data.receptors[0]["color"], KromaTheme.COLOR_MAP["blue"])
+		var bm := get_node_or_null("/root/BackdropManager")
+		if bm:
+			bm.call("set_halo_color", target_col.lerp(Color(0.24, 0.24, 0.28), 0.25))
 
-	# Si no hay texto, ocultar
-	if mensaje == "":
-		prompt.visible = false
-		return
-
-	# Tamaño en píxeles de una casilla (ajustar si tu constante se llama distinto, ej. CELL_SIZE)
-	var cell_px: float = 64.0
-	if "cell_size" in self:
-		cell_px = float(cell_size)
-
-	var ancho_tablero: float = float(level_data.width) * cell_px
-	var alto_tablero: float = float(level_data.height) * cell_px
-	var alto_banner: float = 24.0
-
-	prompt.text = mensaje
-	prompt.visible = true
-	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prompt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	prompt.add_theme_font_size_override("font_size", 9)
-	prompt.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.45))
-	prompt.add_theme_stylebox_override("normal", _crear_estilo_footer_interno())
-
-	# Dimensionar y anclar en la orilla inferior interna de board_container
-	prompt.size = Vector2(ancho_tablero, alto_banner)
-	prompt.global_position = Vector2(
-		board_container.global_position.x,
-		board_container.global_position.y + alto_tablero - alto_banner
-	)
-	prompt.z_index = 50
 
 func _generar_nuevo_procedural() -> void:
 	procedural_run_count += 1
-	print("Calculando tablero procedural con solución...")
-	var nuevo_nivel := LevelGenerator.generate_level(6, 6, 4, 8)
-
+	var diff_info: Dictionary = GameSession.get_difficulty_info()
+	print("Calculando tablero procedural (%s %s)..." % [diff_info["label"], diff_info["grid"]])
+	var nuevo_nivel := LevelGenerator.generate_for_difficulty(GameSession.difficulty, procedural_run_count)
 	if nuevo_nivel:
 		nuevo_nivel.sector = 4
-		nuevo_nivel.level_name = "SIMULATION // %02d" % procedural_run_count
-
-		var ruta_solucion := LevelGenerator.solve_bfs(nuevo_nivel, 10)
-		print("--- SOLUCIÓN CALCULADA POR BFS (%d pasos) ---" % ruta_solucion.size())
-		for paso in ruta_solucion:
-			print("Mover %s hacia %s" % [paso["block"], paso["dir"]])
-		print("---------------------------------------------")
-
+		nuevo_nivel.level_name = "SIMULACIÓN %02d" % procedural_run_count
 		_cargar_nivel(nuevo_nivel)
+
+
+func _actualizar_mensaje_tutorial() -> void:
+	if tutorial_wrap == null or tutorial_label == null:
+		return
+	var mensaje: String = level_data.instruction.strip_edges()
+	tutorial_done = false
+
+	if mensaje == "":
+		tutorial_wrap.visible = false
+		return
+
+	tutorial_dot.text = "●"
+	tutorial_dot.add_theme_color_override("font_color", Color(0.85, 0.86, 0.90))
+	tutorial_label.text = mensaje
+	tutorial_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.96))
+	tutorial_pill.add_theme_stylebox_override("panel", KromaTheme.glass_pill_style(Color(1.0, 1.0, 1.0, 0.24)))
+
+	tutorial_wrap.visible = true
+	tutorial_wrap.modulate.a = 0.0
+	create_tween().tween_property(tutorial_wrap, "modulate:a", 1.0, 0.25)
+
+
+func _complete_tutorial_step(success_msg: String) -> void:
+	if tutorial_done or tutorial_wrap == null or not tutorial_wrap.visible:
+		return
+	tutorial_done = true
+	tutorial_dot.text = "✓"
+	tutorial_dot.add_theme_color_override("font_color", KromaTheme.COLOR_MAP["green"])
+	tutorial_label.text = success_msg
+	tutorial_label.add_theme_color_override("font_color", Color(0.75, 0.96, 0.84))
+	tutorial_pill.add_theme_stylebox_override("panel", KromaTheme.glass_pill_style(Color(0.20, 0.88, 0.45, 0.65)))
+
+	var current_lvl_id := level_data.id
+	await get_tree().create_timer(2.2).timeout
+	if is_inside_tree() and level_data and level_data.id == current_lvl_id and tutorial_done:
+		create_tween().tween_property(tutorial_wrap, "modulate:a", 0.35, 0.35)
+
+
+func _refresh_tutorial_guide() -> void:
+	if _tutorial_guide == null or level_data == null or board == null:
+		return
+	if is_defeated or is_moving:
+		_tutorial_guide.visible = false
+		return
+
+	var max_guided_steps := 0
+	if level_data.id == 1:
+		max_guided_steps = _tutorial_solution.size()
+	elif level_data.id == 2 or level_data.id == 3:
+		max_guided_steps = 1
+
+	if _tutorial_step_idx >= max_guided_steps or _tutorial_step_idx >= _tutorial_solution.size():
+		_tutorial_guide.visible = false
+		return
+
+	var step: Dictionary = _tutorial_solution[_tutorial_step_idx]
+	var target_id: String = step["block"]
+	var snap_blocks: Dictionary = board.snapshot()["blocks"]
+	if not snap_blocks.has(target_id) or snap_blocks[target_id]["locked"]:
+		_tutorial_guide.visible = false
+		return
+
+	_tutorial_guide.configure(
+		snap_blocks[target_id]["pos"],
+		LevelSolver.dir_from_name(step["dir"]),
+		cell_size,
+		bloque_seleccionado == target_id
+	)
