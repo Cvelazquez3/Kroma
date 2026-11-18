@@ -92,7 +92,7 @@ static func connected_wall_style(has_up: bool, has_down: bool, has_left: bool, h
 
 	s.border_width_left = 0 if has_left else 1
 	s.border_width_right = 0 if has_right else 1
-	s.border_width_top = 0 if has_up else 2
+	s.border_width_top = 0 if has_up else 1
 	s.border_width_bottom = 0 if has_down else 1
 	return s
 
@@ -177,8 +177,8 @@ static func create_glass_button(
 	btn.add_theme_stylebox_override("pressed", pressed)
 
 	if with_sfx:
-		btn.mouse_entered.connect(func(): AudioManager.play("snap", 1.35, -14.0))
-		btn.focus_entered.connect(func(): AudioManager.play("snap", 1.35, -14.0))
+		btn.mouse_entered.connect(func(): AudioManager.play("ui_hover", 0.72, -13.0))
+		btn.focus_entered.connect(func(): AudioManager.play("ui_hover", 0.72, -13.0))
 	return btn
 
 

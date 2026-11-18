@@ -330,7 +330,7 @@ func _build_main_ui() -> void:
 
 	var btn_quit := KromaTheme.create_glass_button("SALIR", KromaTheme.COLOR_MAP["red"])
 	btn_quit.pressed.connect(func():
-		AudioManager.play("undo", 0.9, -4.0)
+		AudioManager.play("ui_back", 1.0, -6.0)
 		get_tree().quit()
 	)
 	btn_box.add_child(btn_quit)
@@ -376,13 +376,13 @@ func _create_footer_pill(txt: String, text_col: Color, border_col: Color) -> Pan
 # ==============================================================================
 
 func _on_campaign_pressed() -> void:
-	AudioManager.play("merge", 1.05, -4.0)
+	AudioManager.play("ui_click", 0.55, -5.0)
 	GameSession.start_campaign()
 	_transition_to_gameplay()
 
 
 func _open_difficulty_modal() -> void:
-	AudioManager.play("snap", 1.1, -6.0)
+	AudioManager.play("ui_click", 0.58, -6.0)
 	var content := _create_modal_shell("SIMULACIÓN INFINITA  ·  DIFICULTAD", 440)
 
 	var desc := Label.new()
@@ -401,7 +401,7 @@ func _open_difficulty_modal() -> void:
 		var info: Dictionary = GameSession.get_difficulty_info(diff_id)
 		var btn := KromaTheme.create_glass_button("%s  (%s)" % [info["label"], info["grid"]], entry[1], Vector2(360, 44))
 		btn.pressed.connect(func():
-			AudioManager.play("merge", 1.05, -4.0)
+			AudioManager.play("ui_click", 0.55, -5.0)
 			GameSession.start_procedural(diff_id)
 			_close_modal()
 			_transition_to_gameplay()
@@ -419,7 +419,7 @@ func _open_difficulty_modal() -> void:
 
 
 func _open_guide_modal() -> void:
-	AudioManager.play("snap", 1.1, -6.0)
+	AudioManager.play("ui_click", 0.58, -6.0)
 	var content := _create_modal_shell("GUÍA Y CONTROLES", 540)
 
 	# Controles
@@ -512,7 +512,7 @@ func _open_guide_modal() -> void:
 
 
 func _open_credits_modal() -> void:
-	AudioManager.play("snap", 1.1, -6.0)
+	AudioManager.play("ui_click", 0.58, -6.0)
 	var content := _create_modal_shell("CRÉDITOS  ·  KROMA DEV STUDIO", 460)
 
 	for m: Array in [
@@ -643,7 +643,7 @@ func _add_modal_close_button(vbox: VBoxContainer) -> void:
 	var btn_close := KromaTheme.create_glass_button("VOLVER [ESC]", Color(0.75, 0.78, 0.85), Vector2(180, 38))
 	btn_close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	btn_close.pressed.connect(func():
-		AudioManager.play("undo", 1.1, -8.0)
+		AudioManager.play("ui_back", 1.0, -6.0)
 		_close_modal()
 	)
 	vbox.add_child(btn_close)
