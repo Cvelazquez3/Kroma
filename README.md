@@ -1,6 +1,6 @@
-# KROMA · v2.0
-
 <div align="center">
+
+# KROMA · v2.0
 
 ![Version](https://img.shields.io/badge/Version-v2.0-1f2430?style=for-the-badge)
 ![Godot 4.x](https://img.shields.io/badge/Engine-Godot_4.x-478CBF?style=for-the-badge&logo=godotengine&logoColor=white)
