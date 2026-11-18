@@ -20,6 +20,14 @@ const COLOR_MAP := {
 enum CellStyle { SLOT, OUTER_FRAME, GLASS_BLOCK, GLASS_BLOCK_SELECTED, VOID, RECEPTOR }
 
 
+static func is_web() -> bool:
+	return OS.has_feature("web")
+
+
+static func sym(desktop_text: String, web_text: String = "") -> String:
+	return web_text if OS.has_feature("web") else desktop_text
+
+
 static func bold_title_font() -> SystemFont:
 	var f := SystemFont.new()
 	f.font_names = PackedStringArray(["Segoe UI", "Inter", "Roboto", "Arial"])
