@@ -44,6 +44,19 @@ func _ready() -> void:
 	blur_rect.material = mat
 	blur_layer.add_child(blur_rect)
 
+	get_tree().root.size_changed.connect(_update_responsive_scale)
+	_update_responsive_scale()
+
+
+func _update_responsive_scale() -> void:
+	var root := get_tree().root
+	if root == null:
+		return
+	var win_size := root.size
+	var target := 2.15 if win_size.y > win_size.x else 1.0
+	if not is_equal_approx(root.content_scale_factor, target):
+		root.content_scale_factor = target
+
 
 func set_halo_color(new_col: Color, duration: float = 0.65) -> void:
 	if _halo_node:

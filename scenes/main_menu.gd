@@ -64,15 +64,18 @@ func _build_demo_board() -> void:
 	_demo_layer.layer = -9
 	add_child(_demo_layer)
 
-	var center_wrap := CenterContainer.new()
-	center_wrap.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_demo_layer.add_child(center_wrap)
-
+	var demo_w := _demo_cell_size * 16.0
+	var demo_h := _demo_cell_size * 6.0
 	_demo_container = Control.new()
-	_demo_container.custom_minimum_size = Vector2(_demo_cell_size * 16.0, _demo_cell_size * 6.0)
+	_demo_container.custom_minimum_size = Vector2(demo_w, demo_h)
+	_demo_container.size = Vector2(demo_w, demo_h)
+	_demo_container.set_anchors_preset(Control.PRESET_CENTER)
+	_demo_container.offset_left = -demo_w * 0.5
+	_demo_container.offset_top = -demo_h * 0.5
+	_demo_container.offset_right = demo_w * 0.5
+	_demo_container.offset_bottom = demo_h * 0.5
 	_demo_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	center_wrap.add_child(_demo_container)
+	_demo_layer.add_child(_demo_container)
 
 	# Solo las 3 columnas exteriores de cada lado (centro libre para el menú)
 	for x in range(16):
@@ -233,13 +236,15 @@ func _run_demo_loop() -> void:
 # ==============================================================================
 
 func _build_main_ui() -> void:
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
-
 	var grid_stage := Control.new()
 	grid_stage.custom_minimum_size = Vector2(640, 640)
-	center.add_child(grid_stage)
+	grid_stage.size = Vector2(640, 640)
+	grid_stage.set_anchors_preset(Control.PRESET_CENTER)
+	grid_stage.offset_left = -320.0
+	grid_stage.offset_top = -320.0
+	grid_stage.offset_right = 320.0
+	grid_stage.offset_bottom = 320.0
+	add_child(grid_stage)
 
 	# 1. Logo modular KR[O]MA centrado en la fila 64..128
 	var logo_box := Control.new()
@@ -330,7 +335,7 @@ func _build_main_ui() -> void:
 
 	var btn_quit := KromaTheme.create_glass_button("SALIR", KromaTheme.COLOR_MAP["red"])
 	btn_quit.pressed.connect(func():
-		AudioManager.play("undo", 0.9, -4.0)
+		AudioManager.play("ui_back", 1.0, -6.0)
 		get_tree().quit()
 	)
 	btn_box.add_child(btn_quit)
@@ -348,7 +353,7 @@ func _build_main_ui() -> void:
 	footer_row.add_child(_create_footer_pill("v2.0", Color(0.62, 0.66, 0.74), Color(1.0, 1.0, 1.0, 0.16)))
 	if GameSession.best_streak > 0:
 		footer_row.add_child(_create_footer_pill(
-			"✦ MEJOR RACHA: %02d" % GameSession.best_streak,
+			KromaTheme.sym("✦ MEJOR RACHA: %02d", "MEJOR RACHA: %02d") % GameSession.best_streak,
 			Color(0.55, 0.92, 1.0),
 			Color(0.35, 0.88, 0.98, 0.35)
 		))
@@ -376,13 +381,13 @@ func _create_footer_pill(txt: String, text_col: Color, border_col: Color) -> Pan
 # ==============================================================================
 
 func _on_campaign_pressed() -> void:
-	AudioManager.play("merge", 1.05, -4.0)
+	AudioManager.play("ui_click", 0.55, -5.0)
 	GameSession.start_campaign()
 	_transition_to_gameplay()
 
 
 func _open_difficulty_modal() -> void:
-	AudioManager.play("snap", 1.1, -6.0)
+	AudioManager.play("ui_click", 0.58, -6.0)
 	var content := _create_modal_shell("SIMULACIÓN INFINITA  ·  DIFICULTAD", 440)
 
 	var desc := Label.new()
@@ -401,7 +406,7 @@ func _open_difficulty_modal() -> void:
 		var info: Dictionary = GameSession.get_difficulty_info(diff_id)
 		var btn := KromaTheme.create_glass_button("%s  (%s)" % [info["label"], info["grid"]], entry[1], Vector2(360, 44))
 		btn.pressed.connect(func():
-			AudioManager.play("merge", 1.05, -4.0)
+			AudioManager.play("ui_click", 0.55, -5.0)
 			GameSession.start_procedural(diff_id)
 			_close_modal()
 			_transition_to_gameplay()
@@ -419,7 +424,7 @@ func _open_difficulty_modal() -> void:
 
 
 func _open_guide_modal() -> void:
-	AudioManager.play("snap", 1.1, -6.0)
+	AudioManager.play("ui_click", 0.58, -6.0)
 	var content := _create_modal_shell("GUÍA Y CONTROLES", 540)
 
 	# Controles
@@ -497,7 +502,7 @@ func _open_guide_modal() -> void:
 	str_card.add_child(str_vbox)
 
 	var h_str := Label.new()
-	h_str.text = "✦ RACHA PERFECTA"
+	h_str.text = KromaTheme.sym("✦ RACHA PERFECTA", "RACHA PERFECTA")
 	h_str.add_theme_font_size_override("font_size", 11)
 	h_str.add_theme_color_override("font_color", Color(0.45, 0.92, 1.0))
 	str_vbox.add_child(h_str)
@@ -512,7 +517,7 @@ func _open_guide_modal() -> void:
 
 
 func _open_credits_modal() -> void:
-	AudioManager.play("snap", 1.1, -6.0)
+	AudioManager.play("ui_click", 0.58, -6.0)
 	var content := _create_modal_shell("CRÉDITOS  ·  KROMA DEV STUDIO", 460)
 
 	for m: Array in [
@@ -643,7 +648,7 @@ func _add_modal_close_button(vbox: VBoxContainer) -> void:
 	var btn_close := KromaTheme.create_glass_button("VOLVER [ESC]", Color(0.75, 0.78, 0.85), Vector2(180, 38))
 	btn_close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	btn_close.pressed.connect(func():
-		AudioManager.play("undo", 1.1, -8.0)
+		AudioManager.play("ui_back", 1.0, -6.0)
 		_close_modal()
 	)
 	vbox.add_child(btn_close)

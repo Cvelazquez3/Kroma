@@ -56,15 +56,15 @@ static func show_victory(
 	if par_moves > 0:
 		var rank_lit := 1
 		var rank_col := Color(0.75, 0.78, 0.85)
-		var rank_txt := "★☆☆  RANGO B — COMPLETADO (%d/%d PASOS)" % [current_moves, par_moves]
+		var rank_txt := KromaTheme.sym("★☆☆  ", "") + ("RANGO B — COMPLETADO (%d/%d PASOS)" % [current_moves, par_moves])
 		if current_moves <= par_moves:
 			rank_lit = 3
 			rank_col = Color(1.0, 0.85, 0.20)
-			rank_txt = "★★★  RANGO S — ÓPTIMO (%d/%d PASOS)" % [current_moves, par_moves]
+			rank_txt = KromaTheme.sym("★★★  ", "") + ("RANGO S — ÓPTIMO (%d/%d PASOS)" % [current_moves, par_moves])
 		elif current_moves <= par_moves + 3:
 			rank_lit = 2
 			rank_col = KromaTheme.COLOR_MAP["green"]
-			rank_txt = "★★☆  RANGO A — EFICIENTE (%d/%d PASOS)" % [current_moves, par_moves]
+			rank_txt = KromaTheme.sym("★★☆  ", "") + ("RANGO A — EFICIENTE (%d/%d PASOS)" % [current_moves, par_moves])
 
 		var rank_bar := HBoxContainer.new()
 		rank_bar.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -94,7 +94,7 @@ static func show_victory(
 			Color(0.35, 0.88, 0.98, 0.55),
 			Color(0.10, 0.24, 0.30, 0.55)
 		))
-		lbl_streak.text = "✦ RACHA PERFECTA: %02d  ·  RÉCORD: %02d" % [perfect_streak, best_streak]
+		lbl_streak.text = KromaTheme.sym("✦ ", "") + ("RACHA PERFECTA: %02d  ·  RÉCORD: %02d" % [perfect_streak, best_streak])
 		lbl_streak.add_theme_color_override("font_color", Color(0.45, 0.92, 1.0))
 	else:
 		badge.add_theme_stylebox_override("panel", KromaTheme.glass_pill_style(
@@ -179,12 +179,12 @@ static func show_defeat(tree: SceneTree, on_undo: Callable, on_restart: Callable
 	btn_row.add_theme_constant_override("separation", 12)
 	vbox.add_child(btn_row)
 
-	var btn_undo := KromaTheme.create_glass_button("↶  DESHACER", KromaTheme.COLOR_MAP["yellow"], Vector2(142, 40), 11, false)
+	var btn_undo := KromaTheme.create_glass_button(KromaTheme.sym("↶  DESHACER", "DESHACER"), KromaTheme.COLOR_MAP["yellow"], Vector2(142, 40), 11, false)
 	btn_undo.focus_mode = Control.FOCUS_NONE
 	btn_undo.pressed.connect(on_undo)
 	btn_row.add_child(btn_undo)
 
-	var btn_restart := KromaTheme.create_glass_button("↺  REINICIAR", KromaTheme.COLOR_MAP["red"], Vector2(142, 40), 11, false)
+	var btn_restart := KromaTheme.create_glass_button(KromaTheme.sym("↺  REINICIAR", "REINICIAR"), KromaTheme.COLOR_MAP["red"], Vector2(142, 40), 11, false)
 	btn_restart.focus_mode = Control.FOCUS_NONE
 	btn_restart.pressed.connect(on_restart)
 	btn_row.add_child(btn_restart)

@@ -20,6 +20,14 @@ const COLOR_MAP := {
 enum CellStyle { SLOT, OUTER_FRAME, GLASS_BLOCK, GLASS_BLOCK_SELECTED, VOID, RECEPTOR }
 
 
+static func is_web() -> bool:
+	return OS.has_feature("web")
+
+
+static func sym(desktop_text: String, web_text: String = "") -> String:
+	return web_text if OS.has_feature("web") else desktop_text
+
+
 static func bold_title_font() -> SystemFont:
 	var f := SystemFont.new()
 	f.font_names = PackedStringArray(["Segoe UI", "Inter", "Roboto", "Arial"])
@@ -92,7 +100,7 @@ static func connected_wall_style(has_up: bool, has_down: bool, has_left: bool, h
 
 	s.border_width_left = 0 if has_left else 1
 	s.border_width_right = 0 if has_right else 1
-	s.border_width_top = 0 if has_up else 2
+	s.border_width_top = 0 if has_up else 1
 	s.border_width_bottom = 0 if has_down else 1
 	return s
 
@@ -177,8 +185,8 @@ static func create_glass_button(
 	btn.add_theme_stylebox_override("pressed", pressed)
 
 	if with_sfx:
-		btn.mouse_entered.connect(func(): AudioManager.play("snap", 1.35, -14.0))
-		btn.focus_entered.connect(func(): AudioManager.play("snap", 1.35, -14.0))
+		btn.mouse_entered.connect(func(): AudioManager.play("ui_hover", 0.72, -13.0))
+		btn.focus_entered.connect(func(): AudioManager.play("ui_hover", 0.72, -13.0))
 	return btn
 
 

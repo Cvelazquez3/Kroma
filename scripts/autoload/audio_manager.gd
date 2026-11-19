@@ -15,6 +15,9 @@ func _ready() -> void:
 		"snap": "res://assets/audio/snap.wav",
 		"void": "res://assets/audio/void.wav",
 		"undo": "res://assets/audio/undo.wav",
+		"ui_hover": "res://assets/audio/ui_hover.wav",
+		"ui_click": "res://assets/audio/ui_click.wav",
+		"ui_back": "res://assets/audio/ui_back.wav",
 		"victory_1": "res://assets/audio/victory_1.wav",
 		"victory_2": "res://assets/audio/victory_2.wav",
 		"victory_3": "res://assets/audio/victory_3.wav"
@@ -68,22 +71,50 @@ func play(sfx_name: String, pitch: float = 1.0, volume_db: float = 0.0, max_dura
 
 	target_player.stop()
 	target_player.stream = _streams[sfx_name]
-	target_player.pitch_scale = pitch * randf_range(0.95, 1.05)
+	target_player.set_meta("sfx_name", sfx_name)
+	target_player.pitch_scale = pitch * randf_range(0.96, 1.04)
 	target_player.volume_db = volume_db
 	target_player.play()
 
 	if max_duration > 0.0:
 		var current_stream: AudioStream = _streams[sfx_name]
+		var effective_fade := minf(fade_out_duration, max_duration * 0.5)
 		var tw := create_tween()
 		target_player.set_meta("active_tween", tw)
 
-		var hold_time := maxf(0.0, max_duration - fade_out_duration)
+		var hold_time := maxf(0.0, max_duration - effective_fade)
 		if hold_time > 0.0:
 			tw.tween_interval(hold_time)
 
-		tw.tween_property(target_player, "volume_db", volume_db - 40.0, fade_out_duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		tw.tween_property(target_player, "volume_db", volume_db - 40.0, effective_fade).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 		tw.tween_callback(func():
 			if is_instance_valid(target_player) and target_player.stream == current_stream:
 				target_player.stop()
 				target_player.volume_db = volume_db
 		)
+
+
+## Corta suavemente cualquier instancia activa de un efecto (ej. slide al chocar).
+func stop_sfx(sfx_name: String, fade_time: float = 0.03) -> void:
+	for p in _players:
+		if not is_instance_valid(p) or not p.playing:
+			continue
+		if p.get_meta("sfx_name", "") != sfx_name:
+			continue
+		if p.has_meta("active_tween"):
+			var old_tw = p.get_meta("active_tween")
+			if old_tw is Tween and is_instance_valid(old_tw) and old_tw.is_running():
+				old_tw.kill()
+		if fade_time <= 0.0:
+			p.stop()
+		else:
+			var current_stream := p.stream
+			var orig_vol := p.volume_db
+			var tw := create_tween()
+			p.set_meta("active_tween", tw)
+			tw.tween_property(p, "volume_db", orig_vol - 40.0, fade_time)
+			tw.tween_callback(func():
+				if is_instance_valid(p) and p.stream == current_stream:
+					p.stop()
+					p.volume_db = orig_vol
+			)

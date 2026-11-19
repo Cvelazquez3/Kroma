@@ -32,7 +32,7 @@ var streak_pill: PanelContainer = null
 var tutorial_wrap: CenterContainer = null
 var tutorial_pill: PanelContainer = null
 var tutorial_label: Label = null
-var tutorial_dot: Label = null
+var tutorial_dot: Panel = null
 var tutorial_done: bool = false
 var _tutorial_solution: Array = []
 var _tutorial_step_idx: int = 0
@@ -180,17 +180,17 @@ func _setup_hud() -> void:
 	$HUD/HUDContainer.remove_child(btn_u)
 	$HUD/HUDContainer.remove_child(btn_r)
 
-	var btn_cycle := KromaTheme.create_glass_button("⇄  CAMBIAR", KromaTheme.COLOR_MAP["blue"], Vector2(138, 42), 11, false)
+	var btn_cycle := KromaTheme.create_glass_button(KromaTheme.sym("⇄  CAMBIAR", "CAMBIAR"), KromaTheme.COLOR_MAP["blue"], Vector2(138, 42), 11, false)
 	btn_cycle.name = "CycleButton"
 	btn_cycle.focus_mode = Control.FOCUS_NONE
 	btn_cycle.pressed.connect(_seleccionar_siguiente_bloque)
 
-	btn_u.text = "↶  DESHACER"
+	btn_u.text = KromaTheme.sym("↶  DESHACER", "DESHACER")
 	_apply_dock_button_style(btn_u, KromaTheme.COLOR_MAP["yellow"])
 	if not btn_u.pressed.is_connected(_undo):
 		btn_u.pressed.connect(_undo)
 
-	btn_r.text = "↺  REINICIAR"
+	btn_r.text = KromaTheme.sym("↺  REINICIAR", "REINICIAR")
 	_apply_dock_button_style(btn_r, KromaTheme.COLOR_MAP["red"])
 	if not btn_r.pressed.is_connected(_restart):
 		btn_r.pressed.connect(_restart)
@@ -219,10 +219,13 @@ func _setup_hud() -> void:
 	tut_hbox.add_theme_constant_override("separation", 8)
 	tutorial_pill.add_child(tut_hbox)
 
-	tutorial_dot = Label.new()
-	tutorial_dot.text = "●"
-	tutorial_dot.add_theme_font_size_override("font_size", 10)
-	tutorial_dot.add_theme_color_override("font_color", Color(0.85, 0.86, 0.90))
+	tutorial_dot = Panel.new()
+	tutorial_dot.custom_minimum_size = Vector2(8, 8)
+	tutorial_dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var dot_sb := StyleBoxFlat.new()
+	dot_sb.bg_color = Color(0.85, 0.86, 0.90)
+	dot_sb.set_corner_radius_all(4)
+	tutorial_dot.add_theme_stylebox_override("panel", dot_sb)
 	tut_hbox.add_child(tutorial_dot)
 
 	tutorial_label = Label.new()
@@ -231,7 +234,7 @@ func _setup_hud() -> void:
 	tut_hbox.add_child(tutorial_label)
 
 	var btn_close_tut := Button.new()
-	btn_close_tut.text = "✕"
+	btn_close_tut.text = KromaTheme.sym("✕", "×")
 	btn_close_tut.flat = true
 	btn_close_tut.focus_mode = Control.FOCUS_NONE
 	btn_close_tut.add_theme_font_size_override("font_size", 10)
@@ -272,7 +275,8 @@ func _build_greybox() -> void:
 	var top_reserved := 94.0
 	var bottom_reserved := 108.0 if level_data.instruction.strip_edges() != "" else 76.0
 	var playable_height: float = vp_size.y - top_reserved - bottom_reserved
-	var max_board_px := minf(456.0, playable_height - 16.0)
+	var target_max := minf(vp_size.x - 28.0, 560.0) if vp_size.y > vp_size.x else 456.0
+	var max_board_px := minf(target_max, playable_height - 16.0)
 
 	var max_dim := maxi(level_data.width, level_data.height)
 	cell_size = minf(BASE_CELL_SIZE, max_board_px / float(max_dim))
@@ -314,15 +318,21 @@ func _build_greybox() -> void:
 		void_panel.add_theme_stylebox_override("panel", KromaTheme.cell_style(KromaTheme.CellStyle.VOID, Color.WHITE, corner_rad))
 		board_container.add_child(void_panel)
 
-		var void_glyph := Label.new()
-		void_glyph.text = "⤫"
-		void_glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		void_glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		void_glyph.size = void_panel.size
-		void_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		void_glyph.add_theme_color_override("font_color", Color(0.40, 0.40, 0.44, 0.70))
-		void_glyph.add_theme_font_size_override("font_size", int(cell_size * 0.30))
-		void_panel.add_child(void_glyph)
+		if KromaTheme.is_web():
+			var void_mark := _VoidMark.new()
+			void_mark.size = void_panel.size
+			void_mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			void_panel.add_child(void_mark)
+		else:
+			var void_glyph := Label.new()
+			void_glyph.text = "⤫"
+			void_glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			void_glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			void_glyph.size = void_panel.size
+			void_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			void_glyph.add_theme_color_override("font_color", Color(0.40, 0.40, 0.44, 0.70))
+			void_glyph.add_theme_font_size_override("font_size", int(cell_size * 0.30))
+			void_panel.add_child(void_glyph)
 
 	# Muros unidos ortogonalmente (sin huecos ni saltos subpíxel)
 	var wall_set := {}
@@ -346,6 +356,11 @@ func _build_greybox() -> void:
 		wall.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		wall.add_theme_stylebox_override("panel", KromaTheme.connected_wall_style(has_up, has_down, has_left, has_right, maxi(2, corner_rad - 1)))
 		board_container.add_child(wall)
+
+	# Suavizar esquinas interiores cóncavas en uniones de muros en L
+	var fillets := _WallInnerFillets.new()
+	fillets.setup(level_data.width, level_data.height, cell_size, wall_set, float(maxi(4, corner_rad)))
+	board_container.add_child(fillets)
 
 	# Receptores
 	for r in level_data.receptors:
@@ -469,9 +484,9 @@ func _try_select_block_at(screen_pos: Vector2) -> void:
 			if bloque_seleccionado != b_id:
 				bloque_seleccionado = b_id
 				_actualizar_seleccion_visual()
-				AudioManager.play("snap", 1.25, -10.0)
+				AudioManager.play("ui_hover", 1.0, -8.0)
 				if level_data and level_data.id == 2:
-					_complete_tutorial_step("✓ ¡Bloque alternado! Ahora úsalo de freno")
+					_complete_tutorial_step("¡Bloque alternado! Ahora úsalo de freno")
 				_refresh_tutorial_guide()
 			return
 
@@ -481,10 +496,13 @@ func _seleccionar_siguiente_bloque() -> void:
 	if bloques.is_empty():
 		return
 	var indice := bloques.find(bloque_seleccionado)
-	bloque_seleccionado = bloques[0] if indice == -1 else bloques[(indice + 1) % bloques.size()]
+	var nuevo_id: String = bloques[0] if indice == -1 else bloques[(indice + 1) % bloques.size()]
+	if nuevo_id != bloque_seleccionado:
+		bloque_seleccionado = nuevo_id
+		AudioManager.play("ui_hover", 1.0, -8.0)
 	_actualizar_seleccion_visual()
 	if level_data and level_data.id == 2:
-		_complete_tutorial_step("✓ ¡Bloque alternado! Ahora úsalo de freno")
+		_complete_tutorial_step("¡Bloque alternado! Ahora úsalo de freno")
 	_refresh_tutorial_guide()
 
 
@@ -503,7 +521,7 @@ func _execute_move(dir: Vector2i) -> void:
 
 	if path.is_empty():
 		var moving_blk: Panel = block_nodes[bloque_seleccionado]
-		AudioManager.play("bump", 0.85, -14.0, 0.05)
+		AudioManager.play("bump", 0.85, -12.0)
 		var pos_origen := moving_blk.position
 		var tw_bump := create_tween()
 		tw_bump.tween_property(moving_blk, "position", pos_origen + Vector2(dir) * 3.0, 0.03).set_trans(Tween.TRANS_QUAD)
@@ -532,33 +550,49 @@ func _execute_move(dir: Vector2i) -> void:
 
 	if level_data:
 		if level_data.id == 1:
-			_complete_tutorial_step("✓ ¡Bien! Los bloques avanzan hasta chocar")
+			_complete_tutorial_step("¡Bien! Los bloques avanzan hasta chocar")
 		elif level_data.id == 3 and result == BoardState.MoveResult.OK and board.active_block_ids().size() < blocks_before:
-			_complete_tutorial_step("✓ ¡Síntesis cromática completada!")
+			_complete_tutorial_step("¡Síntesis cromática completada!")
 		elif level_data.id == 4 and current_moves >= 2 and result != BoardState.MoveResult.FELL:
-			_complete_tutorial_step("✓ ¡Controlado! Lleva la pieza a la meta")
+			_complete_tutorial_step("¡Controlado! Lleva la pieza a la meta")
 
-	AudioManager.play("slide", 1.0, -6.0)
 	var moving_blk: Panel = block_nodes[moving_id]
 	var target_pos := Vector2(path[-1].x * cell_size + 4, path[-1].y * cell_size + 4)
 	var move_duration := clampf(0.05 + float(path.size()) * 0.03, 0.07, 0.22)
+	AudioManager.play("slide", 1.0, -8.0, move_duration + 0.03, 0.05)
 
 	var tw := create_tween()
 	tw.tween_property(moving_blk, "position", target_pos, move_duration).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 	tw.tween_callback(func():
+		AudioManager.stop_sfx("slide", 0.03)
 		_sincronizar_bloques_completos()
 		if result == BoardState.MoveResult.FELL:
 			run_is_perfect = false
 			GameSession.reset_streak()
 			_actualizar_hud_movimientos()
-			AudioManager.play("void", 0.90, -2.0, 0.08)
+			AudioManager.play("void", 0.95, -4.0)
 		elif result == BoardState.MoveResult.SNAPPED:
-			AudioManager.play("snap", 1.0, 8, 0.8)
+			AudioManager.play("snap", 1.0, -4.0)
 		elif result == BoardState.MoveResult.OK:
-			AudioManager.play("bump", 0.9, -12.0, 0.06)
+			AudioManager.play("bump", 0.95, -6.0)
 		elif result == BoardState.MoveResult.VICTORY:
-			AudioManager.play("victory_2", randf_range(0.6, 0.8), 0.0, 2.6, 0.8)
+			var victory_sfx := "victory_2"
+			var victory_pitch := randf_range(0.94, 1.08)
+			if par_moves > 0:
+				if current_moves <= par_moves:
+					# Rango S: usa victory_2 (actual) subiendo sutilmente de brillo con la racha
+					victory_sfx = "victory_2"
+					victory_pitch = clampf(0.96 + float(GameSession.perfect_streak) * 0.03, 0.96, 1.18)
+				elif current_moves <= par_moves + 3:
+					# Rango A: alterna entre victory_1 y victory_3 con variación de tono
+					victory_sfx = ["victory_1", "victory_3"].pick_random()
+					victory_pitch = randf_range(0.95, 1.10)
+				else:
+					# Rango B: tono más calmado variando entre victory_1 y victory_3
+					victory_sfx = ["victory_1", "victory_3"].pick_random()
+					victory_pitch = randf_range(0.86, 0.98)
+			AudioManager.play(victory_sfx, victory_pitch, -3.0, 2.4, 0.6)
 			_on_level_victory()
 	)
 
@@ -574,7 +608,7 @@ func _execute_move(dir: Vector2i) -> void:
 			is_moving = false
 			_sincronizar_bloques_completos()
 			if board.is_defeated():
-				_mostrar_derrota()
+				_mostrar_derrota(result == BoardState.MoveResult.FELL)
 			else:
 				_refresh_tutorial_guide()
 	)
@@ -591,6 +625,8 @@ func _sincronizar_bloques_completos() -> void:
 			continue
 
 		blk.visible = true
+		if not is_moving:
+			blk.scale = Vector2.ONE
 		var col: Color = KromaTheme.COLOR_MAP.get(info["color"], Color.WHITE)
 		var estilo := KromaTheme.cell_style(KromaTheme.CellStyle.GLASS_BLOCK, col, corner_rad)
 		if info.get("locked", false):
@@ -605,7 +641,7 @@ func _sincronizar_bloques_completos() -> void:
 		if blk.has_node("Glyph"):
 			var g: Glyph = blk.get_node("Glyph")
 			if g.color_name != info["color"]:
-				AudioManager.play("merge", 1.10, -8)
+				AudioManager.play("merge", 1.05, -4.0)
 				var pop := create_tween()
 				pop.tween_property(blk, "scale", Vector2(1.18, 1.18), 0.05).set_trans(Tween.TRANS_SINE)
 				pop.tween_property(blk, "scale", Vector2.ONE, 0.05).set_trans(Tween.TRANS_SINE)
@@ -636,7 +672,7 @@ func _undo() -> void:
 	_cerrar_derrota()
 	run_is_perfect = false
 	GameSession.reset_streak()
-	AudioManager.play("undo", 1.0, -3.0, 0.08)
+	AudioManager.play("undo", 1.0, -5.0)
 
 	var prev_record: Dictionary = history_stack.pop_back()
 	board.restore(prev_record["board"])
@@ -654,7 +690,7 @@ func _restart() -> void:
 	_cerrar_derrota()
 	run_is_perfect = false
 	GameSession.reset_streak()
-	AudioManager.play("undo", 0.85, -2.0, 0.08)
+	AudioManager.play("undo", 0.85, -4.0)
 	board.restore(initial_snapshot)
 	history_stack.clear()
 	current_moves = 0
@@ -694,11 +730,12 @@ func _on_level_victory() -> void:
 	)
 
 
-func _mostrar_derrota() -> void:
+func _mostrar_derrota(from_void_fall: bool = false) -> void:
 	if is_defeated or defeat_canvas != null:
 		return
 	is_defeated = true
-	AudioManager.play("void", 0.70, 2.0, 0.1)
+	if not from_void_fall:
+		AudioManager.play("void", 0.85, -4.0)
 	defeat_canvas = GameplayOverlays.show_defeat(get_tree(), _undo, _restart)
 
 
@@ -720,7 +757,7 @@ func _mostrar_pausa() -> void:
 	if is_paused or pause_canvas != null:
 		return
 	is_paused = true
-	AudioManager.play("snap", 0.95, -6.0)
+	AudioManager.play("ui_click", 0.78, -6.0)
 
 	var ctx := ""
 	if GameSession.mode == GameSession.Mode.PROCEDURAL:
@@ -733,13 +770,13 @@ func _mostrar_pausa() -> void:
 		get_tree(),
 		ctx,
 		func():
-			AudioManager.play("snap", 1.1, -6.0)
+			AudioManager.play("ui_click", 0.82, -6.0)
 			_cerrar_pausa(),
 		func():
 			_cerrar_pausa()
 			_restart(),
 		func():
-			AudioManager.play("undo", 0.9, -4.0)
+			AudioManager.play("ui_back", 1.0, -6.0)
 			_cerrar_pausa()
 			_cerrar_derrota()
 			var tw_exit := create_tween()
@@ -765,7 +802,7 @@ func _actualizar_hud_movimientos() -> void:
 
 	if streak_label:
 		if run_is_perfect:
-			streak_label.text = "✦ RACHA %02d" % GameSession.perfect_streak
+			streak_label.text = KromaTheme.sym("✦ RACHA %02d", "RACHA %02d") % GameSession.perfect_streak
 			streak_label.add_theme_color_override("font_color", Color(0.40, 0.90, 1.0))
 			if streak_pill:
 				streak_pill.add_theme_stylebox_override("panel", KromaTheme.glass_pill_style(Color(0.35, 0.88, 0.98, 0.45)))
@@ -853,14 +890,17 @@ func _actualizar_mensaje_tutorial() -> void:
 	if tutorial_wrap == null or tutorial_label == null:
 		return
 	var mensaje: String = level_data.instruction.strip_edges()
+	if KromaTheme.is_web():
+		mensaje = mensaje.replace("⤫", "×")
 	tutorial_done = false
 
 	if mensaje == "":
 		tutorial_wrap.visible = false
 		return
 
-	tutorial_dot.text = "●"
-	tutorial_dot.add_theme_color_override("font_color", Color(0.85, 0.86, 0.90))
+	var dot_sb := tutorial_dot.get_theme_stylebox("panel") as StyleBoxFlat
+	if dot_sb:
+		dot_sb.bg_color = Color(0.85, 0.86, 0.90)
 	tutorial_label.text = mensaje
 	tutorial_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.96))
 	tutorial_pill.add_theme_stylebox_override("panel", KromaTheme.glass_pill_style(Color(1.0, 1.0, 1.0, 0.24)))
@@ -874,8 +914,9 @@ func _complete_tutorial_step(success_msg: String) -> void:
 	if tutorial_done or tutorial_wrap == null or not tutorial_wrap.visible:
 		return
 	tutorial_done = true
-	tutorial_dot.text = "✓"
-	tutorial_dot.add_theme_color_override("font_color", KromaTheme.COLOR_MAP["green"])
+	var dot_sb := tutorial_dot.get_theme_stylebox("panel") as StyleBoxFlat
+	if dot_sb:
+		dot_sb.bg_color = KromaTheme.COLOR_MAP["green"]
 	tutorial_label.text = success_msg
 	tutorial_label.add_theme_color_override("font_color", Color(0.75, 0.96, 0.84))
 	tutorial_pill.add_theme_stylebox_override("panel", KromaTheme.glass_pill_style(Color(0.20, 0.88, 0.45, 0.65)))
@@ -916,3 +957,57 @@ func _refresh_tutorial_guide() -> void:
 		cell_size,
 		bloque_seleccionado == target_id
 	)
+
+
+class _WallInnerFillets extends Node2D:
+	var _w: int = 0
+	var _h: int = 0
+	var _cell_px: float = 80.0
+	var _walls: Dictionary = {}
+	var _rad: float = 6.0
+
+	func setup(w: int, h: int, cell_px: float, walls: Dictionary, rad: float) -> void:
+		_w = w
+		_h = h
+		_cell_px = cell_px
+		_walls = walls
+		_rad = rad
+		queue_redraw()
+
+	func _draw() -> void:
+		var col: Color = KromaTheme.COLOR_MAP["wall"]
+		for gx in range(1, _w):
+			for gy in range(1, _h):
+				var tl := _walls.has(Vector2i(gx - 1, gy - 1))
+				var tr := _walls.has(Vector2i(gx, gy - 1))
+				var bl := _walls.has(Vector2i(gx - 1, gy))
+				var br := _walls.has(Vector2i(gx, gy))
+				var px := floorf(float(gx) * _cell_px)
+				var py := floorf(float(gy) * _cell_px)
+
+				if not tl and tr and bl and br:
+					_draw_fillet(Vector2(px + 2.0, py + 2.0), Vector2(-_rad, -_rad), 0.0, PI * 0.5, col)
+				elif tl and not tr and bl and br:
+					_draw_fillet(Vector2(px - 2.0, py + 2.0), Vector2(_rad, -_rad), PI * 0.5, PI, col)
+				elif tl and tr and bl and not br:
+					_draw_fillet(Vector2(px - 2.0, py - 2.0), Vector2(_rad, _rad), PI, PI * 1.5, col)
+				elif tl and tr and not bl and br:
+					_draw_fillet(Vector2(px + 2.0, py - 2.0), Vector2(-_rad, _rad), PI * 1.5, TAU, col)
+
+	func _draw_fillet(corner: Vector2, center_offset: Vector2, a0: float, a1: float, col: Color) -> void:
+		var pts := PackedVector2Array([corner])
+		var center := corner + center_offset
+		var steps := 8
+		for i in range(steps + 1):
+			var ang := lerpf(a0, a1, float(i) / float(steps))
+			pts.append(center + Vector2(cos(ang), sin(ang)) * _rad)
+		draw_colored_polygon(pts, col)
+
+
+class _VoidMark extends Control:
+	func _draw() -> void:
+		var c := size * 0.5
+		var r := minf(size.x, size.y) * 0.095
+		var col := Color(0.45, 0.46, 0.52, 0.45)
+		draw_line(c + Vector2(-r, -r), c + Vector2(r, r), col, 1.4, true)
+		draw_line(c + Vector2(r, -r), c + Vector2(-r, r), col, 1.4, true)
