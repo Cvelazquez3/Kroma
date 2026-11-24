@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/branding/banner.png" alt="Kroma Banner" width="100%" />
+
 # KROMA · v2.0
 
 ![Version](https://img.shields.io/badge/Version-v2.0-1f2430?style=for-the-badge)
