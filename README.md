@@ -149,6 +149,8 @@ kroma-puzzle/
 │   ├── levels/                     # Sectores de campaña en JSON (01 a 04)
 │   └── solutions/                  # Soluciones canónicas verificadas por BFS
 ├── docs/                           # Documentación técnica y reporte de gestión
+│   ├── GDD.md                      # Game Design Document (v2.0)
+│   └── TDD.md                      # Technical Design Document (v2.0)
 ├── scenes/
 │   ├── main_menu.tscn / .gd        # Pantalla de inicio, rieles demo y modales
 │   └── gameplay.tscn / .gd         # Controlador principal de partida y tablero
